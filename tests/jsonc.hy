@@ -107,3 +107,30 @@ test("unterminated block comment is invalid") {
         },
     }, "unterminated /*")?;
 }
+
+test("leading plus is invalid") {
+    assert(is_invalid(jsonc().decode_str("+1")), "+1")?;
+}
+
+test("leading and trailing decimal point is invalid") {
+    assert(is_invalid(jsonc().decode_str(".5")), ".5")?;
+    assert(is_invalid(jsonc().decode_str("5.")), "5.")?;
+}
+
+test("infinity and nan are invalid") {
+    assert(is_invalid(jsonc().decode_str("Infinity")), "Infinity")?;
+    assert(is_invalid(jsonc().decode_str("NaN")), "NaN")?;
+}
+
+test("nested block comments are invalid") {
+    assert(is_invalid(jsonc().decode_str("/* outer /* inner */ still */")), "nested /*")?;
+}
+
+test("comment markers inside strings stay content") {
+    let v = must_decode("\"// not a comment\"");
+    assert(v.is_string() && v.s == "// not a comment", "line marker")?;
+    assert(must_encode(v) == "\"// not a comment\"")?;
+    let b = must_decode("\"/* also not */\"");
+    assert(b.is_string() && b.s == "/* also not */", "block marker")?;
+    assert(must_encode(b) == "\"/* also not */\"")?;
+}
