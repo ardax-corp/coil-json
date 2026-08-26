@@ -52,6 +52,8 @@ The native basename will be `coil_json` (`libcoil_json.so` / `.dylib` / `coil_js
 
 Signatures are in [`src/json.hy`](../src/json.hy). Call patterns are in [`tests/strict.hy`](../tests/strict.hy). `Json::strict()` is RFC 8259 one-shot.
 
+`Json::jsonc()` is parse-only sugar: comments and trailing commas on decode. Encode stays RFC 8259. Not JSON5.
+
 ```coil
 use json::{Json, JsonValue, JsonError};
 
