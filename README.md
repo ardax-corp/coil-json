@@ -38,7 +38,7 @@ Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise f
 
 ## Consume
 
-Sibling checkout, or a git dep plus `coil.lock` pin. See [docs/consume.md](docs/consume.md).
+Sibling checkout, or a git dep plus `coil.lock` pin. Call `Json::strict()` from [docs/consume.md](docs/consume.md).
 
 ```toml
 [dependencies]
