@@ -1,18 +1,38 @@
 # coil-json
 
-Userland JSON for [coil](https://github.com/ardax-corp/coil-lang). Package name is `json`, so `use json::{…}` resolves here. Native lib basename is `coil_json` (`libcoil_json.so` / `.dylib` / `coil_json.dll`) once the FFI lands.
+Userland JSON for [coil](https://github.com/ardax-corp/coil-lang). Package name is `json`, so `use json::{Json, JsonValue, JsonError}` resolves here. Native lib basename is `coil_json` once the FFI lands ([COI-53](https://linear.app/ardax/issue/COI-53)).
 
-This repo is an empty package scaffold. The living codec is still [coil-stdlib](https://github.com/ardax-corp/coil-stdlib) `src/codec/json.hy` ([COI-40](https://linear.app/ardax/issue/COI-40)). It stays there until a later strip. Do not copy it into this tree.
+This package owns strict one-shot encode/decode ([COI-55](https://linear.app/ardax/issue/COI-55)). coil-stdlib must not `use json`. There is no `src/codec/json.hy` here or in stdlib.
 
-## Scope
+## API
 
-Later work here is strict RFC 8259 and JSONC (comments + trailing commas), streaming over `io::Stream`, and FFI to a native parser. Native artifact delivery is [COI-60](https://linear.app/ardax/issue/COI-60). Nothing in that list ships in this scaffold.
+```coil
+use json::{Json, JsonValue, JsonError};
+
+let j = Json::strict();
+let v = j.decode_str("{\"a\":[1,true,null]}")?;
+let bytes = j.encode(v)?;
+```
+
+`Json::strict()` is RFC 8259 only. Comments, trailing commas, pretty-print, and streaming are later tickets. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
+
+| Method | Role |
+|--------|------|
+| `Json::strict()` | Strict codec |
+| `decode` / `encode` | `Vec<byte>` |
+| `decode_str` / `encode_str` | UTF-8 string helpers |
+
+`JsonValue` is a class (not an enum). Coil named modules do not unify recursive `Vec<JsonValue>` (`JsonValue` vs `json::JsonValue`), and `FFIType` already owns `Bool`/`Int`/`Float`/`String`. The tree is an arena of primitive vecs; a `JsonValue` is a `(store, idx)` handle.
+
+Object representation: ordered children. Each object member is a child node whose `keys[child]` is the member name. Duplicates are kept in encounter order. Not a HashMap. Packed IR inflate/deflate stays [COI-54](https://linear.app/ardax/issue/COI-54).
+
+Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise float. Overflow and non-finite floats are `JsonError::Number`.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `src/json.hy` | Package root. Empty stub, no parse/stringify |
+| `src/json.hy` | `Json`, `JsonValue`, `JsonError`, Coil-side parser/stringify |
 | `coil.toml` | `[package] name = "json"` so `use json::{…}` resolves |
 | `native/` | `[ffi] search_paths` placeholder. Not shipped |
 

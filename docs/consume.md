@@ -1,8 +1,6 @@
 # Consuming coil-json
 
-This package is `json`. `use json::{…}` resolves from this repo's `src/` once implementations land. This checkout is an empty scaffold. The living codec remains [coil-stdlib](https://github.com/ardax-corp/coil-stdlib) `src/codec/json.hy`.
-
-coil-stdlib is a sibling `[module] roots` entry, not a dependency of this package. Do not add a `codec` spool dep.
+This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.hy`. Strict one-shot encode/decode ships here. coil-stdlib is a sibling `[module] roots` entry, not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
 
 Coil-to-Coil deps will be spool-owned once a public `spool` CLI exists. Until [COI-219](https://linear.app/ardax/issue/COI-219) `{ git }` parses and the pin is `coil.lock` `rev` + `content_hash`. Native libs stay on `[ffi] search_paths` until [COI-60](https://linear.app/ardax/issue/COI-60).
 
