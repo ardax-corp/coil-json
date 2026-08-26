@@ -2,7 +2,7 @@
 
 This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.hy`. Strict one-shot encode/decode ships here. coil-stdlib is a sibling `[module] roots` entry, not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
 
-Coil-to-Coil deps will be spool-owned once a public `spool` CLI exists. Until [COI-219](https://linear.app/ardax/issue/COI-219) `{ git }` parses and the pin is `coil.lock` `rev` + `content_hash`. Native libs stay on `[ffi] search_paths` until [COI-60](https://linear.app/ardax/issue/COI-60).
+Coil-to-Coil deps will be spool-owned once a public `spool` CLI exists. Until [COI-219](https://linear.app/ardax/issue/COI-219) `{ git }` parses and the pin is `coil.lock` `rev` + `content_hash`.
 
 ## Sibling checkout
 
@@ -11,12 +11,9 @@ Clone this repo next to your project and coil-stdlib. In the consumer `coil.toml
 ```toml
 [module]
 roots = ["./src", "../coil-json/src", "../coil-stdlib/src"]
-
-[ffi]
-search_paths = ["../coil-json/native"]
 ```
 
-`roots` is what loads `src/json.hy`. `[ffi] search_paths` is a placeholder until native artifacts ship. The compiler does not follow path deps for discovery.
+`roots` is what loads `src/json.hy`. The compiler does not follow path deps for discovery.
 
 ## Git dep and coil.lock
 
@@ -28,9 +25,6 @@ json = { git = "https://github.com/ardax-corp/coil-json.git" }
 
 [module]
 roots = ["./src", "./.spool/deps/json/src", "../coil-stdlib/src"]
-
-[ffi]
-search_paths = ["./.spool/deps/json/native"]
 ```
 
 This repo has no tags. The pin is `coil.lock` `rev` + `content_hash`. Omit `tag`. Use sibling checkout until spool materializes `.spool/deps`. The compiler does not read `coil.lock` and does not inject roots.
@@ -45,8 +39,6 @@ content_hash = '<tree SHA>'
 ```
 
 `rev` is the commit. `content_hash` is that commit's git tree (`git rev-parse 'HEAD^{tree}'`). Replace both when you move the pin.
-
-The native basename will be `coil_json` (`libcoil_json.so` / `.dylib` / `coil_json.dll`). Nothing is built here yet.
 
 ## Call Json::strict()
 
@@ -110,7 +102,7 @@ let o = j.decode_str("{\"n\":1,\"ok\":true}")?;
 let two = o.is_object() && o.object_len() == 2;
 ```
 
-Nested objects and arrays come from decode. There is no `from_array` or `from_object`. Objects are ordered children. Duplicate keys are kept in encounter order. Not a HashMap. Packed IR inflate/deflate is [COI-54](https://linear.app/ardax/issue/COI-54).
+Nested objects and arrays come from decode. There is no `from_array` or `from_object`. Objects are ordered children. Duplicate keys are kept in encounter order. Not a HashMap.
 
 A number token with no `.` / `e` / `E` that fits in i64 is an int. Otherwise it is a float.
 
@@ -139,8 +131,6 @@ match j.decode_str("{") {
 
 `Number` and `Utf8` are on the enum. Extra cases are [COI-222](https://linear.app/ardax/issue/COI-222).
 
-### stdlib and native
+### stdlib
 
 coil-stdlib must never `use json`. There is no `src/codec/json.hy` here or in stdlib. Do not add a `codec` spool dep.
-
-Native basename `coil_json` is [COI-53](https://linear.app/ardax/issue/COI-53). Nothing is built yet. IR inflate/deflate is [COI-54](https://linear.app/ardax/issue/COI-54).
