@@ -177,7 +177,9 @@ test("from_float encode and scientific decode") {
     let a = must_decode("1e2");
     assert(a.is_float() && a.f > 99.9 && a.f < 100.1, "1e2")?;
     let b = must_decode("1E-1");
-    assert(b.is_float() && b.f > 0.09 && b.f < 0.11, "1E-1")?;
+    let lo = 1.0 / 20.0;
+    let hi = 1.0 / 5.0;
+    assert(b.is_float() && b.f > lo && b.f < hi, "1E-1")?;
 }
 
 test("duplicate keys kept in encounter order") {
