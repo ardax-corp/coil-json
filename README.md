@@ -14,7 +14,7 @@ let v = j.decode_str("{\"a\":[1,true,null]}")?;
 let bytes = j.encode(v)?;
 ```
 
-`Json::strict()` is RFC 8259 only. Comments, trailing commas, pretty-print, and streaming are later tickets. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
+`Json::strict()` is RFC 8259 only. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
 
 | Method | Role |
 |--------|------|
@@ -38,7 +38,7 @@ Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise f
 
 ## Consume
 
-Sibling checkout, or a git dep plus `coil.lock` pin. See [docs/consume.md](docs/consume.md).
+Sibling checkout, or a git dep plus `coil.lock` pin. Call `Json::strict()` from [docs/consume.md](docs/consume.md).
 
 ```toml
 [dependencies]
