@@ -38,6 +38,26 @@ fn is_invalid(Result<JsonValue, JsonError> r) -> bool {
     };
 }
 
+fn is_utf8(Result<JsonValue, JsonError> r) -> bool {
+    return match r {
+        Result::Ok(_) => false,
+        Result::Err(e) => match e {
+            JsonError::Utf8 { line, column } => line >= 1 && column >= 1,
+            _ => false,
+        },
+    };
+}
+
+fn encode_is_number(Result<string, JsonError> r) -> bool {
+    return match r {
+        Result::Ok(_) => false,
+        Result::Err(e) => match e {
+            JsonError::Number { line, column } => line >= 1 && column >= 1,
+            _ => false,
+        },
+    };
+}
+
 test("empty object") {
     let v = must_decode("{}");
     assert(v.is_object() && v.object_len() == 0, "decode {}")?;
@@ -148,4 +168,41 @@ test("empty input is invalid") {
             _ => false,
         },
     }, "empty")?;
+}
+
+test("from_float encode and scientific decode") {
+    assert(must_encode(JsonValue::from_float(1.5)) == "1.5")?;
+    let two = must_encode(JsonValue::from_float(2.0));
+    assert(two == "2.0")?;
+    let a = must_decode("1e2");
+    assert(a.is_float() && a.f > 99.9 && a.f < 100.1, "1e2")?;
+    let b = must_decode("1E-1");
+    let lo = 1.0 / 20.0;
+    let hi = 1.0 / 5.0;
+    assert(b.is_float() && b.f > lo && b.f < hi, "1E-1")?;
+}
+
+test("duplicate keys kept in encounter order") {
+    let v = must_decode("{\"a\":1,\"b\":2,\"a\":3}");
+    assert(v.is_object() && v.object_len() == 3, "three members")?;
+    assert(must_encode(v) == "{\"a\":1,\"b\":2,\"a\":3}")?;
+}
+
+test("lone surrogate is utf8") {
+    assert(is_utf8(codec().decode_str("\"\\uD800\"")), "JsonError::Utf8")?;
+}
+
+test("non-finite float encode is number") {
+    let nan = sqrt(0.0 - 1.0);
+    assert(encode_is_number(codec().encode_str(JsonValue::from_float(nan))), "NaN")?;
+    let inf = exp(1000.0);
+    assert(encode_is_number(codec().encode_str(JsonValue::from_float(inf))), "Inf")?;
+}
+
+test("unterminated string is invalid") {
+    assert(is_invalid(codec().decode_str("\"hello")), "unterminated")?;
+}
+
+test("raw control char in string is invalid") {
+    assert(is_invalid(codec().decode_str("\"a\nb\"")), "raw newline")?;
 }
