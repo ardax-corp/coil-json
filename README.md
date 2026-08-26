@@ -14,7 +14,7 @@ let v = j.decode_str("{\"a\":[1,true,null]}")?;
 let bytes = j.encode(v)?;
 ```
 
-`Json::strict()` is RFC 8259 only. Comments, trailing commas, pretty-print, and streaming are later tickets. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
+`Json::strict()` is RFC 8259 only. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
 
 | Method | Role |
 |--------|------|

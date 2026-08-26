@@ -50,7 +50,7 @@ The native basename will be `coil_json` (`libcoil_json.so` / `.dylib` / `coil_js
 
 ## Call Json::strict()
 
-Signatures are in [`src/json.hy`](../src/json.hy). Call patterns are in [`tests/strict.hy`](../tests/strict.hy). `Json::strict()` is RFC 8259 one-shot. It rejects comments and trailing commas. Pretty-print and streaming are later tickets.
+Signatures are in [`src/json.hy`](../src/json.hy). Call patterns are in [`tests/strict.hy`](../tests/strict.hy). `Json::strict()` is RFC 8259 one-shot.
 
 ```coil
 use json::{Json, JsonValue, JsonError};
