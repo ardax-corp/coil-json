@@ -1,4 +1,4 @@
-// Package root. Coil-side strict one-shot encode/decode (COI-55). Native FFI is COI-53.
+// Package root. Coil-side encode/decode (COI-55) plus jsonc parse mode (COI-56). Native FFI is COI-53.
 // Named-module recursive `Vec<JsonValue>` does not unify (`JsonValue` vs `json::JsonValue`).
 // The tree is an arena of primitive vecs; JsonValue is a (store, idx) handle.
 use string::{from_bytes, to_bytes, format};
@@ -89,6 +89,7 @@ class Parser {
     line: int,
     col: int,
     store: Store,
+    jsonc: bool,
 }
 
 impl JsonValue {
@@ -394,15 +395,55 @@ impl Parser {
         return self.bytes[self.i];
     }
 
-    fn skip_ws() {
+    fn skip_ws() -> Result<(), JsonError> {
         while !self.at_end() {
             let c = self.cur();
             if c == " " || c == "\t" || c == "\n" || c == "\r" {
                 self.bump();
-            } else {
+                continue;
+            }
+            if !self.jsonc || c != "/" {
                 break;
             }
+            if self.i + 1 >= len(self.bytes) {
+                break;
+            }
+            let n = self.bytes[self.i + 1];
+            if n == "/" {
+                self.bump();
+                self.bump();
+                while !self.at_end() {
+                    let x = self.cur();
+                    if x == "\n" || x == "\r" {
+                        break;
+                    }
+                    self.bump();
+                }
+                continue;
+            }
+            if n != "*" {
+                break;
+            }
+            self.bump();
+            self.bump();
+            let closed = false;
+            while !self.at_end() {
+                if self.cur() == "*" {
+                    self.bump();
+                    if !self.at_end() && self.cur() == "/" {
+                        self.bump();
+                        closed = true;
+                        break;
+                    }
+                } else {
+                    self.bump();
+                }
+            }
+            if !closed {
+                raise JsonError::Invalid { line: self.line, column: self.col };
+            }
         }
+        return ();
     }
 
     fn hex_val(byte c) -> int {
@@ -780,7 +821,7 @@ impl Parser {
 
     #[max_depth(256)]
     fn parse_value() -> Result<int, JsonError> {
-        self.skip_ws();
+        self.skip_ws()?;
         if self.at_end() {
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
@@ -803,7 +844,7 @@ impl Parser {
         }
         if c == "[" {
             self.bump();
-            self.skip_ws();
+            self.skip_ws()?;
             let arr = self.store.add(5, false, 0, 0.0, "", "");
             if !self.at_end() && self.cur() == "]" {
                 self.bump();
@@ -812,11 +853,15 @@ impl Parser {
             while true {
                 let kid = self.parse_value()?;
                 self.store.attach(arr, kid);
-                self.skip_ws();
+                self.skip_ws()?;
                 if !self.at_end() && self.cur() == "," {
                     self.bump();
-                    self.skip_ws();
+                    self.skip_ws()?;
                     if !self.at_end() && self.cur() == "]" {
+                        if self.jsonc {
+                            self.bump();
+                            break;
+                        }
                         raise JsonError::Invalid { line: self.line, column: self.col };
                     }
                     continue;
@@ -831,19 +876,19 @@ impl Parser {
         }
         if c == "{" {
             self.bump();
-            self.skip_ws();
+            self.skip_ws()?;
             let obj = self.store.add(6, false, 0, 0.0, "", "");
             if !self.at_end() && self.cur() == "}" {
                 self.bump();
                 return obj;
             }
             while true {
-                self.skip_ws();
+                self.skip_ws()?;
                 if self.at_end() || self.cur() != "\"" {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 let key = self.parse_string()?;
-                self.skip_ws();
+                self.skip_ws()?;
                 if self.at_end() || self.cur() != ":" {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
@@ -851,11 +896,15 @@ impl Parser {
                 let kid = self.parse_value()?;
                 self.store.keys[kid] = key;
                 self.store.attach(obj, kid);
-                self.skip_ws();
+                self.skip_ws()?;
                 if !self.at_end() && self.cur() == "," {
                     self.bump();
-                    self.skip_ws();
+                    self.skip_ws()?;
                     if !self.at_end() && self.cur() == "}" {
+                        if self.jsonc {
+                            self.bump();
+                            break;
+                        }
                         raise JsonError::Invalid { line: self.line, column: self.col };
                     }
                     continue;
@@ -872,7 +921,7 @@ impl Parser {
     }
 }
 
-/// Strict RFC 8259 codec. `Json::jsonc()` and streaming are later tickets.
+/// RFC 8259 codec. `Json::jsonc()` is parse-only sugar on the same parser.
 class Json {
     mode: int,
 }
@@ -883,6 +932,11 @@ impl Json {
         return new Json(0);
     }
 
+    /// JSONC decode: `//` / `/* */` comments and trailing commas. Encode is still RFC 8259.
+    static fn jsonc() -> Json {
+        return new Json(1);
+    }
+
     fn encode(JsonValue value) -> Result<Vec<byte>, JsonError> {
         let out: Vec<byte> = Vec::new();
         value.emit(out)?;
@@ -890,9 +944,10 @@ impl Json {
     }
 
     fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
-        let p = new Parser(bytes, 0, 1, 1, Store::new());
+        let jsonc = self.mode == 1;
+        let p = new Parser(bytes, 0, 1, 1, Store::new(), jsonc);
         let root = p.parse_value()?;
-        p.skip_ws();
+        p.skip_ws()?;
         if !p.at_end() {
             raise JsonError::Invalid { line: p.line, column: p.col };
         }
