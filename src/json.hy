@@ -395,6 +395,22 @@ impl Parser {
         return self.bytes[self.i];
     }
 
+    /// Coil `&&` / `||` evaluate both sides; never pair `at_end` with `cur()` in one expr.
+    fn peek_eq(byte c) -> bool {
+        if self.at_end() {
+            return false;
+        }
+        return self.cur() == c;
+    }
+
+    fn peek_digit() -> bool {
+        if self.at_end() {
+            return false;
+        }
+        let c = self.cur();
+        return c >= "0" && c <= "9";
+    }
+
     pub fn skip_ws() -> Result<(), JsonError> {
         while !self.at_end() {
             let c = self.cur();
@@ -430,7 +446,7 @@ impl Parser {
             while !self.at_end() {
                 if self.cur() == "*" {
                     self.bump();
-                    if !self.at_end() && self.cur() == "/" {
+                    if self.peek_eq("/") {
                         self.bump();
                         closed = true;
                         break;
@@ -558,11 +574,11 @@ impl Parser {
         }
         let cp = self.parse_hex4()?;
         if cp >= 55296 && cp <= 56319 {
-            if self.at_end() || self.cur() != "\\" {
+            if !self.peek_eq("\\") {
                 raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
-            if self.at_end() || self.cur() != "u" {
+            if !self.peek_eq("u") {
                 raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
@@ -582,7 +598,7 @@ impl Parser {
     }
 
     fn parse_string() -> Result<string, JsonError> {
-        if self.at_end() || self.cur() != "\"" {
+        if !self.peek_eq("\"") {
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         self.bump();
@@ -756,27 +772,27 @@ impl Parser {
                 self.bump();
             }
         }
-        if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+        if !self.peek_digit() {
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         if self.cur() == "0" {
             self.bump();
-            if !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            if self.peek_digit() {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
         } else {
-            while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            while self.peek_digit() {
                 self.bump();
             }
         }
         let is_float = false;
-        if !self.at_end() && self.cur() == "." {
+        if self.peek_eq(".") {
             is_float = true;
             self.bump();
-            if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+            if !self.peek_digit() {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
-            while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            while self.peek_digit() {
                 self.bump();
             }
         }
@@ -789,10 +805,10 @@ impl Parser {
                         self.bump();
                     }
                 }
-                if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+                if !self.peek_digit() {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
-                while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+                while self.peek_digit() {
                     self.bump();
                 }
             }
@@ -810,7 +826,7 @@ impl Parser {
         let b = to_bytes(lit);
         let k = 0;
         while k < len(b) {
-            if self.at_end() || self.cur() != b[k] {
+            if !self.peek_eq(b[k]) {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
             self.bump();
@@ -846,7 +862,7 @@ impl Parser {
             self.bump();
             self.skip_ws()?;
             let arr = self.store.add(5, false, 0, 0.0, "", "");
-            if !self.at_end() && self.cur() == "]" {
+            if self.peek_eq("]") {
                 self.bump();
                 return arr;
             }
@@ -854,10 +870,10 @@ impl Parser {
                 let kid = self.parse_value()?;
                 self.store.attach(arr, kid);
                 self.skip_ws()?;
-                if !self.at_end() && self.cur() == "," {
+                if self.peek_eq(",") {
                     self.bump();
                     self.skip_ws()?;
-                    if !self.at_end() && self.cur() == "]" {
+                    if self.peek_eq("]") {
                         if self.jsonc {
                             self.bump();
                             break;
@@ -866,7 +882,7 @@ impl Parser {
                     }
                     continue;
                 }
-                if !self.at_end() && self.cur() == "]" {
+                if self.peek_eq("]") {
                     self.bump();
                     break;
                 }
@@ -878,18 +894,18 @@ impl Parser {
             self.bump();
             self.skip_ws()?;
             let obj = self.store.add(6, false, 0, 0.0, "", "");
-            if !self.at_end() && self.cur() == "}" {
+            if self.peek_eq("}") {
                 self.bump();
                 return obj;
             }
             while true {
                 self.skip_ws()?;
-                if self.at_end() || self.cur() != "\"" {
+                if !self.peek_eq("\"") {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 let key = self.parse_string()?;
                 self.skip_ws()?;
-                if self.at_end() || self.cur() != ":" {
+                if !self.peek_eq(":") {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 self.bump();
@@ -897,10 +913,10 @@ impl Parser {
                 self.store.keys[kid] = key;
                 self.store.attach(obj, kid);
                 self.skip_ws()?;
-                if !self.at_end() && self.cur() == "," {
+                if self.peek_eq(",") {
                     self.bump();
                     self.skip_ws()?;
-                    if !self.at_end() && self.cur() == "}" {
+                    if self.peek_eq("}") {
                         if self.jsonc {
                             self.bump();
                             break;
@@ -909,7 +925,7 @@ impl Parser {
                     }
                     continue;
                 }
-                if !self.at_end() && self.cur() == "}" {
+                if self.peek_eq("}") {
                     self.bump();
                     break;
                 }
