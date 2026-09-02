@@ -123,7 +123,7 @@ impl JsonValue {
         return JsonValue::wrap(st, idx);
     }
 
-    static fn from_float(float x) -> JsonValue {
+    pub static fn from_float(float x) -> JsonValue {
         let st = Store::new();
         let idx = st.add(3, false, 0, x, "", "");
         return JsonValue::wrap(st, idx);
@@ -954,7 +954,7 @@ impl Json {
         return JsonValue::wrap(p.store, root);
     }
 
-    fn encode_str(JsonValue value) -> Result<string, JsonError> {
+    pub fn encode_str(JsonValue value) -> Result<string, JsonError> {
         let bytes = self.encode(value)?;
         return match from_bytes(bytes) {
             Result::Ok(s) => s,
@@ -962,7 +962,7 @@ impl Json {
         };
     }
 
-    fn decode_str(string s) -> Result<JsonValue, JsonError> {
+    pub fn decode_str(string s) -> Result<JsonValue, JsonError> {
         return self.decode(to_bytes(s))?;
     }
 }
