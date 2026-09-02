@@ -33,7 +33,7 @@ fn is_invalid(Result<JsonValue, JsonError> r) -> bool {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Invalid { line, column } => line >= 1 && column >= 1,
-            _ => false,
+            default => false,
         },
     };
 }
@@ -43,7 +43,7 @@ fn is_utf8(Result<JsonValue, JsonError> r) -> bool {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Utf8 { line, column } => line >= 1 && column >= 1,
-            _ => false,
+            default => false,
         },
     };
 }
@@ -53,7 +53,7 @@ fn encode_is_number(Result<string, JsonError> r) -> bool {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Number { line, column } => line >= 1 && column >= 1,
-            _ => false,
+            default => false,
         },
     };
 }
@@ -146,7 +146,7 @@ test("invalid on second line") {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Invalid { line, column } => line == 2 && column >= 1,
-            _ => false,
+            default => false,
         },
     }, "trailing comma line 2")?;
 }
@@ -165,7 +165,7 @@ test("empty input is invalid") {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Invalid { line, column } => line == 1 && column == 1,
-            _ => false,
+            default => false,
         },
     }, "empty")?;
 }
