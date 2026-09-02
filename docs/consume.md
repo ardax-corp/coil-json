@@ -124,7 +124,7 @@ match j.decode_str("{") {
     Result::Ok(_) => false,
     Result::Err(e) => match e {
         JsonError::Invalid { line, column } => line >= 1 && column >= 1,
-        _ => false,
+        default => false,
     },
 }
 ```
