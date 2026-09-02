@@ -4,19 +4,19 @@
 use string::{from_bytes, to_bytes, format};
 
 class Store {
-    tags: Vec<int>,
-    flags: Vec<bool>,
-    ints: Vec<int>,
-    floats: Vec<float>,
-    strs: Vec<string>,
-    keys: Vec<string>,
-    first: Vec<int>,
+    pub tags: Vec<int>,
+    pub flags: Vec<bool>,
+    pub ints: Vec<int>,
+    pub floats: Vec<float>,
+    pub strs: Vec<string>,
+    pub keys: Vec<string>,
+    pub first: Vec<int>,
     last: Vec<int>,
-    next: Vec<int>,
+    pub next: Vec<int>,
 }
 
 impl Store {
-    static fn new() -> Store {
+    pub static fn new() -> Store {
         let tags: Vec<int> = Vec::new();
         let flags: Vec<bool> = Vec::new();
         let ints: Vec<int> = Vec::new();
@@ -29,7 +29,7 @@ impl Store {
         return new Store(tags, flags, ints, floats, strs, keys, first, last, next);
     }
 
-    fn add(int tag, bool flag, int n, float x, string s, string key) -> int {
+    pub fn add(int tag, bool flag, int n, float x, string s, string key) -> int {
         let idx = len(self.tags);
         self.tags.push(tag);
         self.flags.push(flag);
@@ -43,7 +43,7 @@ impl Store {
         return idx;
     }
 
-    fn attach(int parent, int child) {
+    pub fn attach(int parent, int child) {
         if self.first[parent] < 0 {
             self.first[parent] = child;
             self.last[parent] = child;
@@ -53,7 +53,7 @@ impl Store {
         }
     }
 
-    fn count_children(int idx) -> int {
+    pub fn count_children(int idx) -> int {
         let n = 0;
         let c = self.first[idx];
         while c >= 0 {
@@ -69,10 +69,10 @@ class JsonValue {
     store: Store,
     idx: int,
     tag: int,
-    flag: bool,
-    i: int,
-    f: float,
-    s: string,
+    pub flag: bool,
+    pub i: int,
+    pub f: float,
+    pub s: string,
 }
 
 /// Decode/encode failure. `line` and `column` are 1-based (column counts bytes in the line).
@@ -86,14 +86,14 @@ enum JsonError {
 class Parser {
     bytes: Vec<byte>,
     i: int,
-    line: int,
-    col: int,
-    store: Store,
+    pub line: int,
+    pub col: int,
+    pub store: Store,
     jsonc: bool,
 }
 
 impl JsonValue {
-    static fn wrap(Store store, int idx) -> JsonValue {
+    pub static fn wrap(Store store, int idx) -> JsonValue {
         return new JsonValue(
             store,
             idx,
@@ -105,69 +105,69 @@ impl JsonValue {
         );
     }
 
-    static fn null() -> JsonValue {
+    pub static fn null() -> JsonValue {
         let st = Store::new();
         let idx = st.add(0, false, 0, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
-    static fn from_bool(bool flag) -> JsonValue {
+    pub static fn from_bool(bool flag) -> JsonValue {
         let st = Store::new();
         let idx = st.add(1, flag, 0, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
-    static fn from_int(int n) -> JsonValue {
+    pub static fn from_int(int n) -> JsonValue {
         let st = Store::new();
         let idx = st.add(2, false, n, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
-    static fn from_float(float x) -> JsonValue {
+    pub static fn from_float(float x) -> JsonValue {
         let st = Store::new();
         let idx = st.add(3, false, 0, x, "", "");
         return JsonValue::wrap(st, idx);
     }
 
-    static fn from_string(string s) -> JsonValue {
+    pub static fn from_string(string s) -> JsonValue {
         let st = Store::new();
         let idx = st.add(4, false, 0, 0.0, s, "");
         return JsonValue::wrap(st, idx);
     }
 
-    fn is_null() -> bool {
+    pub fn is_null() -> bool {
         return self.tag == 0;
     }
 
-    fn is_bool() -> bool {
+    pub fn is_bool() -> bool {
         return self.tag == 1;
     }
 
-    fn is_int() -> bool {
+    pub fn is_int() -> bool {
         return self.tag == 2;
     }
 
-    fn is_float() -> bool {
+    pub fn is_float() -> bool {
         return self.tag == 3;
     }
 
-    fn is_string() -> bool {
+    pub fn is_string() -> bool {
         return self.tag == 4;
     }
 
-    fn is_array() -> bool {
+    pub fn is_array() -> bool {
         return self.tag == 5;
     }
 
-    fn is_object() -> bool {
+    pub fn is_object() -> bool {
         return self.tag == 6;
     }
 
-    fn array_len() -> int {
+    pub fn array_len() -> int {
         return self.store.count_children(self.idx);
     }
 
-    fn object_len() -> int {
+    pub fn object_len() -> int {
         return self.store.count_children(self.idx);
     }
 
@@ -357,13 +357,13 @@ impl JsonValue {
         raise JsonError::Invalid { line: 1, column: 1 };
     }
 
-    fn emit(Vec<byte> out) -> Result<(), JsonError> {
+    pub fn emit(Vec<byte> out) -> Result<(), JsonError> {
         return self.emit_idx(out, self.idx)?;
     }
 }
 
 impl Parser {
-    fn at_end() -> bool {
+    pub fn at_end() -> bool {
         return self.i >= len(self.bytes);
     }
 
@@ -395,7 +395,23 @@ impl Parser {
         return self.bytes[self.i];
     }
 
-    fn skip_ws() -> Result<(), JsonError> {
+    /// Coil `&&` / `||` evaluate both sides; never pair `at_end` with `cur()` in one expr.
+    fn peek_eq(byte c) -> bool {
+        if self.at_end() {
+            return false;
+        }
+        return self.cur() == c;
+    }
+
+    fn peek_digit() -> bool {
+        if self.at_end() {
+            return false;
+        }
+        let c = self.cur();
+        return c >= "0" && c <= "9";
+    }
+
+    pub fn skip_ws() -> Result<(), JsonError> {
         while !self.at_end() {
             let c = self.cur();
             if c == " " || c == "\t" || c == "\n" || c == "\r" {
@@ -430,7 +446,7 @@ impl Parser {
             while !self.at_end() {
                 if self.cur() == "*" {
                     self.bump();
-                    if !self.at_end() && self.cur() == "/" {
+                    if self.peek_eq("/") {
                         self.bump();
                         closed = true;
                         break;
@@ -558,11 +574,11 @@ impl Parser {
         }
         let cp = self.parse_hex4()?;
         if cp >= 55296 && cp <= 56319 {
-            if self.at_end() || self.cur() != "\\" {
+            if !self.peek_eq("\\") {
                 raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
-            if self.at_end() || self.cur() != "u" {
+            if !self.peek_eq("u") {
                 raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
@@ -582,7 +598,7 @@ impl Parser {
     }
 
     fn parse_string() -> Result<string, JsonError> {
-        if self.at_end() || self.cur() != "\"" {
+        if !self.peek_eq("\"") {
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         self.bump();
@@ -756,27 +772,27 @@ impl Parser {
                 self.bump();
             }
         }
-        if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+        if !self.peek_digit() {
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         if self.cur() == "0" {
             self.bump();
-            if !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            if self.peek_digit() {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
         } else {
-            while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            while self.peek_digit() {
                 self.bump();
             }
         }
         let is_float = false;
-        if !self.at_end() && self.cur() == "." {
+        if self.peek_eq(".") {
             is_float = true;
             self.bump();
-            if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+            if !self.peek_digit() {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
-            while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+            while self.peek_digit() {
                 self.bump();
             }
         }
@@ -789,10 +805,10 @@ impl Parser {
                         self.bump();
                     }
                 }
-                if self.at_end() || self.cur() < "0" || self.cur() > "9" {
+                if !self.peek_digit() {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
-                while !self.at_end() && self.cur() >= "0" && self.cur() <= "9" {
+                while self.peek_digit() {
                     self.bump();
                 }
             }
@@ -810,7 +826,7 @@ impl Parser {
         let b = to_bytes(lit);
         let k = 0;
         while k < len(b) {
-            if self.at_end() || self.cur() != b[k] {
+            if !self.peek_eq(b[k]) {
                 raise JsonError::Invalid { line: self.line, column: self.col };
             }
             self.bump();
@@ -820,7 +836,7 @@ impl Parser {
     }
 
     #[max_depth(256)]
-    fn parse_value() -> Result<int, JsonError> {
+    pub fn parse_value() -> Result<int, JsonError> {
         self.skip_ws()?;
         if self.at_end() {
             raise JsonError::Invalid { line: self.line, column: self.col };
@@ -846,7 +862,7 @@ impl Parser {
             self.bump();
             self.skip_ws()?;
             let arr = self.store.add(5, false, 0, 0.0, "", "");
-            if !self.at_end() && self.cur() == "]" {
+            if self.peek_eq("]") {
                 self.bump();
                 return arr;
             }
@@ -854,10 +870,10 @@ impl Parser {
                 let kid = self.parse_value()?;
                 self.store.attach(arr, kid);
                 self.skip_ws()?;
-                if !self.at_end() && self.cur() == "," {
+                if self.peek_eq(",") {
                     self.bump();
                     self.skip_ws()?;
-                    if !self.at_end() && self.cur() == "]" {
+                    if self.peek_eq("]") {
                         if self.jsonc {
                             self.bump();
                             break;
@@ -866,7 +882,7 @@ impl Parser {
                     }
                     continue;
                 }
-                if !self.at_end() && self.cur() == "]" {
+                if self.peek_eq("]") {
                     self.bump();
                     break;
                 }
@@ -878,18 +894,18 @@ impl Parser {
             self.bump();
             self.skip_ws()?;
             let obj = self.store.add(6, false, 0, 0.0, "", "");
-            if !self.at_end() && self.cur() == "}" {
+            if self.peek_eq("}") {
                 self.bump();
                 return obj;
             }
             while true {
                 self.skip_ws()?;
-                if self.at_end() || self.cur() != "\"" {
+                if !self.peek_eq("\"") {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 let key = self.parse_string()?;
                 self.skip_ws()?;
-                if self.at_end() || self.cur() != ":" {
+                if !self.peek_eq(":") {
                     raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 self.bump();
@@ -897,10 +913,10 @@ impl Parser {
                 self.store.keys[kid] = key;
                 self.store.attach(obj, kid);
                 self.skip_ws()?;
-                if !self.at_end() && self.cur() == "," {
+                if self.peek_eq(",") {
                     self.bump();
                     self.skip_ws()?;
-                    if !self.at_end() && self.cur() == "}" {
+                    if self.peek_eq("}") {
                         if self.jsonc {
                             self.bump();
                             break;
@@ -909,7 +925,7 @@ impl Parser {
                     }
                     continue;
                 }
-                if !self.at_end() && self.cur() == "}" {
+                if self.peek_eq("}") {
                     self.bump();
                     break;
                 }
@@ -928,22 +944,22 @@ class Json {
 
 impl Json {
     /// Strict RFC 8259 mode. Rejects comments and trailing commas.
-    static fn strict() -> Json {
+    pub static fn strict() -> Json {
         return new Json(0);
     }
 
     /// JSONC decode: `//` / `/* */` comments and trailing commas. Encode is still RFC 8259.
-    static fn jsonc() -> Json {
+    pub static fn jsonc() -> Json {
         return new Json(1);
     }
 
-    fn encode(JsonValue value) -> Result<Vec<byte>, JsonError> {
+    pub fn encode(JsonValue value) -> Result<Vec<byte>, JsonError> {
         let out: Vec<byte> = Vec::new();
         value.emit(out)?;
         return out;
     }
 
-    fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
+    pub fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
         let jsonc = self.mode == 1;
         let p = new Parser(bytes, 0, 1, 1, Store::new(), jsonc);
         let root = p.parse_value()?;
@@ -954,7 +970,7 @@ impl Json {
         return JsonValue::wrap(p.store, root);
     }
 
-    fn encode_str(JsonValue value) -> Result<string, JsonError> {
+    pub fn encode_str(JsonValue value) -> Result<string, JsonError> {
         let bytes = self.encode(value)?;
         return match from_bytes(bytes) {
             Result::Ok(s) => s,
@@ -962,7 +978,7 @@ impl Json {
         };
     }
 
-    fn decode_str(string s) -> Result<JsonValue, JsonError> {
+    pub fn decode_str(string s) -> Result<JsonValue, JsonError> {
         return self.decode(to_bytes(s))?;
     }
 }

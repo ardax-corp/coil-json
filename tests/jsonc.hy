@@ -29,7 +29,7 @@ fn is_invalid(Result<JsonValue, JsonError> r) -> bool {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Invalid { line, column } => line >= 1 && column >= 1,
-            _ => false,
+            default => false,
         },
     };
 }
@@ -103,7 +103,7 @@ test("unterminated block comment is invalid") {
         Result::Ok(_) => false,
         Result::Err(e) => match e {
             JsonError::Invalid { line, column } => line >= 1 && column >= 1,
-            _ => false,
+            default => false,
         },
     }, "unterminated /*")?;
 }
