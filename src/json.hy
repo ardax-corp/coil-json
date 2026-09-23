@@ -16,17 +16,25 @@ class Store {
 }
 
 impl Store {
-    pub static fn new() -> Store {
-        let tags: Vec<int> = Vec::new();
-        let flags: Vec<bool> = Vec::new();
-        let ints: Vec<int> = Vec::new();
-        let floats: Vec<float> = Vec::new();
-        let strs: Vec<string> = Vec::new();
-        let keys: Vec<string> = Vec::new();
-        let first: Vec<int> = Vec::new();
-        let last: Vec<int> = Vec::new();
-        let next: Vec<int> = Vec::new();
+    pub static fn with_capacity(int n) -> Store {
+        let cap = n;
+        if cap < 4 {
+            cap = 4;
+        }
+        let tags: Vec<int> = Vec::with_capacity(cap);
+        let flags: Vec<bool> = Vec::with_capacity(cap);
+        let ints: Vec<int> = Vec::with_capacity(cap);
+        let floats: Vec<float> = Vec::with_capacity(cap);
+        let strs: Vec<string> = Vec::with_capacity(cap);
+        let keys: Vec<string> = Vec::with_capacity(cap);
+        let first: Vec<int> = Vec::with_capacity(cap);
+        let last: Vec<int> = Vec::with_capacity(cap);
+        let next: Vec<int> = Vec::with_capacity(cap);
         return new Store(tags, flags, ints, floats, strs, keys, first, last, next);
+    }
+
+    pub static fn new() -> Store {
+        return Store::with_capacity(4);
     }
 
     pub fn add(int tag, bool flag, int n, float x, string s, string key) -> int {
@@ -164,11 +172,38 @@ impl JsonValue {
     }
 
     pub fn array_len() -> int {
-        return self.store.count_children(self.idx);
+        return self.store.ints[self.idx];
     }
 
     pub fn object_len() -> int {
-        return self.store.count_children(self.idx);
+        return self.store.ints[self.idx];
+    }
+
+    fn append_uint(Vec<byte> out, int n) {
+        if n == 0 {
+            out.push("0" as byte);
+            return;
+        }
+        let buf: Vec<byte> = Vec::with_capacity(20);
+        let v = n;
+        while v > 0 {
+            let d = v % 10;
+            buf.push((("0" as byte as int) + d) as byte);
+            v = v / 10;
+        }
+        let i = len(buf);
+        while i > 0 {
+            i = i - 1;
+            out.push(buf[i]);
+        }
+    }
+
+    fn append_int(Vec<byte> out, int n) {
+        if n < 0 {
+            self.append_str(out, format("%i", n));
+            return;
+        }
+        self.append_uint(out, n);
     }
 
     fn append_str(Vec<byte> out, string s) {
@@ -299,19 +334,29 @@ impl JsonValue {
     fn emit_idx(Vec<byte> out, int idx) -> Result<(), JsonError> {
         let tag = self.store.tags[idx];
         if tag == 0 {
-            self.append_str(out, "null");
+            out.push("n" as byte);
+            out.push("u" as byte);
+            out.push("l" as byte);
+            out.push("l" as byte);
             return ();
         }
         if tag == 1 {
             if self.store.flags[idx] {
-                self.append_str(out, "true");
+                out.push("t" as byte);
+                out.push("r" as byte);
+                out.push("u" as byte);
+                out.push("e" as byte);
             } else {
-                self.append_str(out, "false");
+                out.push("f" as byte);
+                out.push("a" as byte);
+                out.push("l" as byte);
+                out.push("s" as byte);
+                out.push("e" as byte);
             }
             return ();
         }
         if tag == 2 {
-            self.append_str(out, format("%i", self.store.ints[idx]));
+            self.append_int(out, self.store.ints[idx]);
             return ();
         }
         if tag == 3 {
@@ -360,6 +405,16 @@ impl JsonValue {
     pub fn emit(Vec<byte> out) -> Result<(), JsonError> {
         return self.emit_idx(out, self.idx)?;
     }
+
+    pub fn encode_buf() -> Result<Vec<byte>, JsonError> {
+        let n = len(self.store.tags) * 8;
+        if n < 16 {
+            n = 16;
+        }
+        let out: Vec<byte> = Vec::with_capacity(n);
+        self.emit(out)?;
+        return out;
+    }
 }
 
 impl Parser {
@@ -371,24 +426,48 @@ impl Parser {
         if self.i >= len(self.bytes) {
             return;
         }
-        let c = self.bytes[self.i];
         self.i = self.i + 1;
-        if c == "\r" {
-            self.line = self.line + 1;
-            self.col = 1;
-            if self.i < len(self.bytes) {
-                if self.bytes[self.i] == "\n" {
-                    self.i = self.i + 1;
+    }
+
+    /// Fill `line` and `column` from a byte offset. Used when raising.
+    pub fn mark_at(int at) {
+        let line = 1;
+        let col = 1;
+        let j = 0;
+        let end = at;
+        let n = len(self.bytes);
+        if end > n {
+            end = n;
+        }
+        if end < 0 {
+            end = 0;
+        }
+        while j < end {
+            let c = self.bytes[j];
+            j = j + 1;
+            if c == "\r" {
+                line = line + 1;
+                col = 1;
+                if j < end {
+                    if self.bytes[j] == "\n" {
+                        j = j + 1;
+                    }
+                }
+            } else {
+                if c == "\n" {
+                    line = line + 1;
+                    col = 1;
+                } else {
+                    col = col + 1;
                 }
             }
-        } else {
-            if c == "\n" {
-                self.line = self.line + 1;
-                self.col = 1;
-            } else {
-                self.col = self.col + 1;
-            }
         }
+        self.line = line;
+        self.col = col;
+    }
+
+    pub fn mark() {
+        self.mark_at(self.i);
     }
 
     fn cur() -> byte {
@@ -456,7 +535,8 @@ impl Parser {
                 }
             }
             if !closed {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
         }
         return ();
@@ -484,9 +564,11 @@ impl Parser {
         let n4096: int = 4096;
         let n262144: int = 262144;
         if cp < 0 || cp > 1114111 {
+            self.mark();
             raise JsonError::Utf8 { line: self.line, column: self.col };
         }
         if cp >= 55296 && cp <= 57343 {
+            self.mark();
             raise JsonError::Utf8 { line: self.line, column: self.col };
         }
         if cp <= 127 {
@@ -516,11 +598,13 @@ impl Parser {
         let k = 0;
         while k < 4 {
             if self.at_end() {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             let h = self.hex_val(self.cur());
             if h < 0 {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             n = n * 16 + h;
             self.bump();
@@ -530,10 +614,10 @@ impl Parser {
     }
 
     fn parse_escape(Vec<byte> out) -> Result<(), JsonError> {
-        let line = self.line;
-        let col = self.col;
+        let at = self.i;
         if self.at_end() {
-            raise JsonError::Invalid { line: line, column: col };
+            self.mark_at(at);
+            raise JsonError::Invalid { line: self.line, column: self.col };
         }
         let c = self.cur();
         self.bump();
@@ -570,28 +654,33 @@ impl Parser {
             return ();
         }
         if c != "u" {
-            raise JsonError::Invalid { line: line, column: col };
+            self.mark_at(at);
+            raise JsonError::Invalid { line: self.line, column: self.col };
         }
         let cp = self.parse_hex4()?;
         if cp >= 55296 && cp <= 56319 {
             if !self.peek_eq("\\") {
-                raise JsonError::Utf8 { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
             if !self.peek_eq("u") {
-                raise JsonError::Utf8 { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             self.bump();
             let low = self.parse_hex4()?;
             if low < 56320 || low > 57343 {
-                raise JsonError::Utf8 { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Utf8 { line: self.line, column: self.col };
             }
             let n65536: int = 65536;
             let n1024: int = 1024;
             cp = n65536 + ((cp - 55296) * n1024) + (low - 56320);
         } else {
             if cp >= 56320 && cp <= 57343 {
-                raise JsonError::Utf8 { line: line, column: col };
+                self.mark_at(at);
+                raise JsonError::Utf8 { line: self.line, column: self.col };
             }
         }
         return self.push_cp(out, cp)?;
@@ -599,13 +688,15 @@ impl Parser {
 
     fn parse_string() -> Result<string, JsonError> {
         if !self.peek_eq("\"") {
+            self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         self.bump();
-        let out: Vec<byte> = Vec::new();
+        let out: Vec<byte> = Vec::with_capacity(32);
         while true {
             if self.at_end() {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             let c = self.cur();
             if c == "\"" {
@@ -618,7 +709,8 @@ impl Parser {
                 continue;
             }
             if c < " " {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             out.push(c);
             self.bump();
@@ -640,7 +732,8 @@ impl Parser {
             }
         }
         if i >= end {
-            raise JsonError::Number { line: line, column: column };
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
         }
         let value = 0.0;
         let saw_digit = false;
@@ -672,7 +765,8 @@ impl Parser {
             }
         }
         if !saw_digit {
-            raise JsonError::Number { line: line, column: column };
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
         }
         let pfrac = 0;
         while pfrac < frac_places {
@@ -701,12 +795,14 @@ impl Parser {
                     i = i + 1;
                 }
                 if i == exp_start {
-                    raise JsonError::Number { line: line, column: column };
+                    self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
                 }
             }
         }
         if i != end {
-            raise JsonError::Number { line: line, column: column };
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
         }
         let scaled = sign * value;
         let e = 0;
@@ -719,11 +815,13 @@ impl Parser {
             e = e + 1;
         }
         if scaled != scaled {
-            raise JsonError::Number { line: line, column: column };
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
         }
         if scaled != 0.0 {
             if scaled * 2.0 == scaled {
-                raise JsonError::Number { line: line, column: column };
+                self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
             }
         }
         return scaled;
@@ -740,7 +838,8 @@ impl Parser {
             }
         }
         if i >= end {
-            raise JsonError::Number { line: line, column: column };
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
         }
         let value = 0;
         while i < end {
@@ -748,7 +847,8 @@ impl Parser {
             let next = value * ten + d;
             if value > 0 {
                 if next < value {
-                    raise JsonError::Number { line: line, column: column };
+                    self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
                 }
             }
             value = next;
@@ -767,21 +867,40 @@ impl Parser {
         let line = self.line;
         let col = self.col;
         let start = self.i;
+        let negative = false;
         if !self.at_end() {
             if self.cur() == "-" {
+                negative = true;
                 self.bump();
             }
         }
         if !self.peek_digit() {
+            self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
+        let ten: int = 10;
+        let value = 0;
+        let overflow = false;
         if self.cur() == "0" {
             self.bump();
             if self.peek_digit() {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
         } else {
             while self.peek_digit() {
+                let d: int = (self.cur() as int) - ("0" as byte as int);
+                if !overflow {
+                    let next = value * ten + d;
+                    if value > 0 {
+                        if next < value {
+                            overflow = true;
+                        }
+                    }
+                    if !overflow {
+                        value = next;
+                    }
+                }
                 self.bump();
             }
         }
@@ -790,7 +909,8 @@ impl Parser {
             is_float = true;
             self.bump();
             if !self.peek_digit() {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             while self.peek_digit() {
                 self.bump();
@@ -806,7 +926,8 @@ impl Parser {
                     }
                 }
                 if !self.peek_digit() {
-                    raise JsonError::Invalid { line: self.line, column: self.col };
+                    self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 while self.peek_digit() {
                     self.bump();
@@ -818,8 +939,16 @@ impl Parser {
             let f = self.parse_float_slice(start, end, line, col)?;
             return self.store.add(3, false, 0, f, "", "");
         }
-        let n = self.parse_int_slice(start, end, line, col)?;
-        return self.store.add(2, false, n, 0.0, "", "");
+        if overflow {
+            self.mark_at(start);
+            raise JsonError::Number { line: self.line, column: self.col };
+        }
+        if negative {
+            if value != 0 {
+                value = 0 - value;
+            }
+        }
+        return self.store.add(2, false, value, 0.0, "", "");
     }
 
     fn parse_literal(string lit, int tag, bool flag) -> Result<int, JsonError> {
@@ -827,7 +956,8 @@ impl Parser {
         let k = 0;
         while k < len(b) {
             if !self.peek_eq(b[k]) {
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
             self.bump();
             k = k + 1;
@@ -839,6 +969,7 @@ impl Parser {
     pub fn parse_value() -> Result<int, JsonError> {
         self.skip_ws()?;
         if self.at_end() {
+            self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
         }
         let c = self.cur();
@@ -866,9 +997,11 @@ impl Parser {
                 self.bump();
                 return arr;
             }
+            let count = 0;
             while true {
                 let kid = self.parse_value()?;
                 self.store.attach(arr, kid);
+                count = count + 1;
                 self.skip_ws()?;
                 if self.peek_eq(",") {
                     self.bump();
@@ -878,7 +1011,8 @@ impl Parser {
                             self.bump();
                             break;
                         }
-                        raise JsonError::Invalid { line: self.line, column: self.col };
+                        self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
                     }
                     continue;
                 }
@@ -886,8 +1020,10 @@ impl Parser {
                     self.bump();
                     break;
                 }
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
+            self.store.ints[arr] = count;
             return arr;
         }
         if c == "{" {
@@ -898,20 +1034,24 @@ impl Parser {
                 self.bump();
                 return obj;
             }
+            let count = 0;
             while true {
                 self.skip_ws()?;
                 if !self.peek_eq("\"") {
-                    raise JsonError::Invalid { line: self.line, column: self.col };
+                    self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 let key = self.parse_string()?;
                 self.skip_ws()?;
                 if !self.peek_eq(":") {
-                    raise JsonError::Invalid { line: self.line, column: self.col };
+                    self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
                 }
                 self.bump();
                 let kid = self.parse_value()?;
                 self.store.keys[kid] = key;
                 self.store.attach(obj, kid);
+                count = count + 1;
                 self.skip_ws()?;
                 if self.peek_eq(",") {
                     self.bump();
@@ -921,7 +1061,8 @@ impl Parser {
                             self.bump();
                             break;
                         }
-                        raise JsonError::Invalid { line: self.line, column: self.col };
+                        self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
                     }
                     continue;
                 }
@@ -929,11 +1070,14 @@ impl Parser {
                     self.bump();
                     break;
                 }
-                raise JsonError::Invalid { line: self.line, column: self.col };
+                self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
             }
+            self.store.ints[obj] = count;
             return obj;
         }
-        raise JsonError::Invalid { line: self.line, column: self.col };
+        self.mark();
+            raise JsonError::Invalid { line: self.line, column: self.col };
     }
 }
 
@@ -954,17 +1098,17 @@ impl Json {
     }
 
     pub fn encode(JsonValue value) -> Result<Vec<byte>, JsonError> {
-        let out: Vec<byte> = Vec::new();
-        value.emit(out)?;
-        return out;
+        return value.encode_buf()?;
     }
 
     pub fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
         let jsonc = self.mode == 1;
-        let p = new Parser(bytes, 0, 1, 1, Store::new(), jsonc);
+        let guess = len(bytes) / 8;
+        let p = new Parser(bytes, 0, 1, 1, Store::with_capacity(guess), jsonc);
         let root = p.parse_value()?;
         p.skip_ws()?;
         if !p.at_end() {
+            p.mark();
             raise JsonError::Invalid { line: p.line, column: p.col };
         }
         return JsonValue::wrap(p.store, root);
