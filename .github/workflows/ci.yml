@@ -37,7 +37,8 @@ jobs:
           workspaces: .ci/coil-lang
 
       - name: Build coil
-        run: cargo build --bin coil --manifest-path .ci/coil-lang/Cargo.toml
+        # `coil test` re-execs coil-test from the same directory.
+        run: cargo build --bin coil --bin coil-test --manifest-path .ci/coil-lang/Cargo.toml
 
       - name: Language harness (`coil test`)
         run: .ci/coil-lang/target/debug/coil test

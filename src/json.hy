@@ -179,6 +179,81 @@ impl JsonValue {
         return self.store.ints[self.idx];
     }
 
+    /// Member `key` of an object (the first one when keys repeat).
+    /// `None` when absent or when this is not an object.
+    pub fn get(string key) -> Option<JsonValue> {
+        if self.tag != 6 {
+            return Option::None;
+        }
+        let c = self.store.first[self.idx];
+        while c >= 0 {
+            if self.store.keys[c] == key {
+                return Option::Some(JsonValue::wrap(self.store, c));
+            }
+            c = self.store.next[c];
+        }
+        return Option::None;
+    }
+
+    /// Element `i` of an array. `None` when out of range or not an array.
+    pub fn at(int i) -> Option<JsonValue> {
+        if self.tag != 5 || i < 0 {
+            return Option::None;
+        }
+        let c = self.store.first[self.idx];
+        let n = 0;
+        while c >= 0 {
+            if n == i {
+                return Option::Some(JsonValue::wrap(self.store, c));
+            }
+            n = n + 1;
+            c = self.store.next[c];
+        }
+        return Option::None;
+    }
+
+    /// Member names of an object in document order (empty otherwise).
+    pub fn keys() -> Vec<string> {
+        let out: Vec<string> = Vec::new();
+        if self.tag != 6 {
+            return out;
+        }
+        let c = self.store.first[self.idx];
+        while c >= 0 {
+            out.push(self.store.keys[c]);
+            c = self.store.next[c];
+        }
+        return out;
+    }
+
+    pub fn as_str() -> Option<string> {
+        if self.tag != 4 {
+            return Option::None;
+        }
+        return Option::Some(self.s);
+    }
+
+    pub fn as_int() -> Option<int> {
+        if self.tag != 2 {
+            return Option::None;
+        }
+        return Option::Some(self.i);
+    }
+
+    pub fn as_float() -> Option<float> {
+        if self.tag != 3 {
+            return Option::None;
+        }
+        return Option::Some(self.f);
+    }
+
+    pub fn as_bool() -> Option<bool> {
+        if self.tag != 1 {
+            return Option::None;
+        }
+        return Option::Some(self.flag);
+    }
+
     fn append_uint(Vec<byte> out, int n) {
         if n == 0 {
             out.push("0" as byte);
