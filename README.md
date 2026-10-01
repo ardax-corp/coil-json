@@ -26,6 +26,17 @@ let v2 = c.decode_str("// cfg\n{ \"a\": 1, }")?;
 | `decode` / `encode` | `Vec<byte>` |
 | `decode_str` / `encode_str` | UTF-8 string helpers |
 
+Reading a decoded value:
+
+| Method | Role |
+|--------|------|
+| `is_null()` … `is_object()` | type checks |
+| `get(key)` | object member (first match) or `None` |
+| `at(i)` | array element or `None` |
+| `keys()` | object member names in order |
+| `as_str()` / `as_int()` / `as_float()` / `as_bool()` | the value when it has that type, else `None` |
+| `array_len()` / `object_len()` | child counts |
+
 `JsonValue` is a class (not an enum). Coil named modules do not unify recursive `Vec<JsonValue>` (`JsonValue` vs `json::JsonValue`), and `FFIType` already owns `Bool`/`Int`/`Float`/`String`. The tree is an arena of primitive vecs; a `JsonValue` is a `(store, idx)` handle.
 
 Object representation: ordered children. Each object member is a child node whose `keys[child]` is the member name. Duplicates are kept in encounter order. Not a HashMap.
