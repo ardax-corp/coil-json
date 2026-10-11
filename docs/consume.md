@@ -1,44 +1,22 @@
 # Consuming coil-json
 
-This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.hy`. Strict one-shot encode/decode ships here. coil-stdlib is a sibling `[module] roots` entry, not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
+This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.hy`. Strict one-shot encode/decode ships here. coil-stdlib is not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
 
-Coil-to-Coil deps will be spool-owned once a public `spool` CLI exists. Until [COI-219](https://linear.app/ardax/issue/COI-219) `{ git }` parses and the pin is `coil.lock` `rev` + `content_hash`.
+## Depend on it
 
-## Sibling checkout
+With [spool](https://github.com/ardax-corp/spool):
 
-Clone this repo next to your project and coil-stdlib. In the consumer `coil.toml`:
-
-```toml
-[module]
-roots = ["./src", "../coil-json/src", "../coil-stdlib/src"]
+```bash
+spool add json --git https://github.com/ardax-corp/coil-json.git --rev <commit SHA>
 ```
 
-`roots` is what loads `src/json.hy`. The compiler does not follow path deps for discovery.
+This repo has no tags, so pin a commit with `--rev`. spool records the dep in `coil.toml`, writes `coil.lock` (`rev` + `content_hash`), links `.spool/deps/json`, and passes `--root` for it and coil-stdlib to `coil` on `spool build` / `run` / `test`.
 
-## Git dep and coil.lock
+Without spool, clone this repo next to your project and pass the roots yourself. coil reads no `coil.toml` and no `coil.lock`.
 
-`{ git }` is the parseable form. `version` is optional schema, not a tag. `rev` on the dep is stored only. Do not run `spool add`. There is no public spool CLI.
-
-```toml
-[dependencies]
-json = { git = "https://github.com/ardax-corp/coil-json.git" }
-
-[module]
-roots = ["./src", "./.spool/deps/json/src", "../coil-stdlib/src"]
+```bash
+coil --root ../coil-json/src main.hy
 ```
-
-This repo has no tags. The pin is `coil.lock` `rev` + `content_hash`. Omit `tag`. Use sibling checkout until spool materializes `.spool/deps`. The compiler does not read `coil.lock` and does not inject roots.
-
-```
-# spool lockfile v1
-[[package]]
-name = 'json'
-git = 'https://github.com/ardax-corp/coil-json.git'
-rev = '<commit SHA>'
-content_hash = '<tree SHA>'
-```
-
-`rev` is the commit. `content_hash` is that commit's git tree (`git rev-parse 'HEAD^{tree}'`). Replace both when you move the pin.
 
 ## Call Json::strict()
 
@@ -68,7 +46,7 @@ let v = j.decode(to_bytes("[null]"))?;
 let encoded = j.encode(v)?;
 ```
 
-`string` comes from coil-stdlib via `[module] roots`, not from this package.
+`string` is a compiler built-in module, not from this package.
 
 ### JsonValue
 

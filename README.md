@@ -48,18 +48,15 @@ Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise f
 | Path | Role |
 |------|------|
 | `src/json.hy` | `Json`, `JsonValue`, `JsonError`, Coil-side parser/stringify |
-| `coil.toml` | `[package] name = "json"` so `use json::{…}` resolves |
+| `coil.toml` | spool manifest (`[package] name = "json"`); coil does not read it |
 
 ## Consume
 
-Sibling checkout, or a git dep plus `coil.lock` pin. Call `Json::strict()` from [docs/consume.md](docs/consume.md).
-
-```toml
-[dependencies]
-json = { git = "https://github.com/ardax-corp/coil-json.git" }
+```bash
+spool add json --git https://github.com/ardax-corp/coil-json.git --rev <commit SHA>
 ```
 
-`{ git }` is the parseable form. `version` is optional schema, not a tag. The pin is `coil.lock` `rev` + `content_hash`. coil-stdlib is a sibling `[module] roots` entry, not a spool dependency of this package.
+No tags yet, so pin a commit. Without spool, pass `--root ../coil-json/src` to `coil`. Call `Json::strict()` from [docs/consume.md](docs/consume.md).
 
 ## License
 
