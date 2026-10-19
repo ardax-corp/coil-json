@@ -8,7 +8,7 @@ use string::{format, to_bytes, from_bytes};
 fn push_str(Vec<byte> out, string s) {
     let b = to_bytes(s);
     let i = 0;
-    while i < len(b) {
+    while i < b.len() {
         out.push(b[i]);
         i = i + 1;
     }
@@ -26,7 +26,7 @@ fn push_int(Vec<byte> out, int n) {
         buf.push((("0" as byte as int) + d) as byte);
         v = v / 10;
     }
-    let i = len(buf);
+    let i = buf.len();
     while i > 0 {
         i = i - 1;
         out.push(buf[i]);
@@ -118,7 +118,7 @@ fn must_decode(Json j, string doc) -> JsonValue {
 
 fn must_encode(Json j, JsonValue v) -> int {
     return match j.encode(v) {
-        Result::Ok(b) => len(b),
+        Result::Ok(b) => b.len(),
         Result::Err(_) => panic "encode",
     };
 }

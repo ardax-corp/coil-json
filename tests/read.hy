@@ -67,9 +67,9 @@ test("at reads array elements") {
 
 test("keys keeps document order") {
     let ks = must_decode("{\"z\":1,\"a\":2}").keys();
-    assert!(len(ks) == 2, "two keys");
+    assert!(ks.len() == 2, "two keys");
     assert!(ks[0] == "z" && ks[1] == "a", "order");
-    assert!(len(must_decode("[1]").keys()) == 0, "array has no keys");
+    assert!(must_decode("[1]").keys().len() == 0, "array has no keys");
 }
 
 test("as_* match only their own type") {
