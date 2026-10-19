@@ -38,7 +38,7 @@ impl Store {
     }
 
     pub fn add(int tag, bool flag, int n, float x, string s, string key) -> int {
-        let idx = len(self.tags);
+        let idx = self.tags.len();
         self.tags.push(tag);
         self.flags.push(flag);
         self.ints.push(n);
@@ -266,7 +266,7 @@ impl JsonValue {
             buf.push((("0" as byte as int) + d) as byte);
             v = v / 10;
         }
-        let i = len(buf);
+        let i = buf.len();
         while i > 0 {
             i = i - 1;
             out.push(buf[i]);
@@ -284,7 +284,7 @@ impl JsonValue {
     fn append_str(Vec<byte> out, string s) {
         let b = to_bytes(s);
         let i = 0;
-        while i < len(b) {
+        while i < b.len() {
             out.push(b[i]);
             i = i + 1;
         }
@@ -302,7 +302,7 @@ impl JsonValue {
         let cr: int = 13;
         let sp: int = 32;
         let ten: int = 10;
-        while i < len(b) {
+        while i < b.len() {
             let c: int = b[i] as int;
             if c == ("\"" as byte as int) {
                 out.push("\\" as byte);
@@ -361,7 +361,7 @@ impl JsonValue {
         }
         let s = format("%f", x);
         let b = to_bytes(s);
-        let n = len(b);
+        let n = b.len();
         if n == 0 {
             raise JsonError::Number { line: 1, column: 1 };
         }
@@ -482,7 +482,7 @@ impl JsonValue {
     }
 
     pub fn encode_buf() -> Result<Vec<byte>, JsonError> {
-        let n = len(self.store.tags) * 8;
+        let n = self.store.tags.len() * 8;
         if n < 16 {
             n = 16;
         }
@@ -494,11 +494,11 @@ impl JsonValue {
 
 impl Parser {
     pub fn at_end() -> bool {
-        return self.i >= len(self.bytes);
+        return self.i >= self.bytes.len();
     }
 
     fn bump() {
-        if self.i >= len(self.bytes) {
+        if self.i >= self.bytes.len() {
             return;
         }
         self.i = self.i + 1;
@@ -510,7 +510,7 @@ impl Parser {
         let col = 1;
         let j = 0;
         let end = at;
-        let n = len(self.bytes);
+        let n = self.bytes.len();
         if end > n {
             end = n;
         }
@@ -575,7 +575,7 @@ impl Parser {
             if !self.jsonc || c != "/" {
                 break;
             }
-            if self.i + 1 >= len(self.bytes) {
+            if self.i + 1 >= self.bytes.len() {
                 break;
             }
             let n = self.bytes[self.i + 1];
@@ -1029,7 +1029,7 @@ impl Parser {
     fn parse_literal(string lit, int tag, bool flag) -> Result<int, JsonError> {
         let b = to_bytes(lit);
         let k = 0;
-        while k < len(b) {
+        while k < b.len() {
             if !self.peek_eq(b[k]) {
                 self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
@@ -1178,7 +1178,7 @@ impl Json {
 
     pub fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
         let jsonc = self.mode == 1;
-        let guess = len(bytes) / 8;
+        let guess = bytes.len() / 8;
         let p = new Parser(bytes, 0, 1, 1, Store::with_capacity(guess), jsonc);
         let root = p.parse_value()?;
         p.skip_ws()?;
