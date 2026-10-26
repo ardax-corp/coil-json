@@ -89,7 +89,6 @@ A number token with no `.` / `e` / `E` that fits in i64 is an int. Otherwise it 
 ```coil
 enum JsonError {
     Invalid { line: int, column: int },
-    Io { line: int, column: int },
     Utf8 { line: int, column: int },
     Number { line: int, column: int },
 }

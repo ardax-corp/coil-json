@@ -17,7 +17,7 @@ let c = Json::jsonc();
 let v2 = c.decode_str("// cfg\n{ \"a\": 1, }")?;
 ```
 
-`Json::strict()` is RFC 8259 only. `Json::jsonc()` is parse-only sugar: comments and trailing commas on decode; encode stays RFC 8259; not JSON5. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Io`, `Utf8`, `Number`), not panic.
+`Json::strict()` is RFC 8259 only. `Json::jsonc()` is parse-only sugar: comments and trailing commas on decode; encode stays RFC 8259; not JSON5. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Utf8`, `Number`), not panic.
 
 | Method | Role |
 |--------|------|
