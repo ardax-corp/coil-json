@@ -194,9 +194,9 @@ test("lone surrogate is utf8") {
 }
 
 test("non-finite float encode is number") {
-    let nan = sqrt(0.0 - 1.0);
+    let nan = 0.0 / 0.0;
     assert!(encode_is_number(codec().encode_str(JsonValue::from_float(nan))), "NaN");
-    let inf = exp(1000.0);
+    let inf = 1.0 / 0.0;
     assert!(encode_is_number(codec().encode_str(JsonValue::from_float(inf))), "Inf");
 }
 
