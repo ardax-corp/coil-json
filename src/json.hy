@@ -564,7 +564,31 @@ impl Parser {
         return c >= "0" && c <= "9";
     }
 
+    // The first offset at or after `i` that is not an ASCII digit.
+    fn digits_end(int i) -> int {
+        let b = self.bytes;
+        while i < b.len() {
+            let c = b[i];
+            if c < "0" || c > "9" {
+                break;
+            }
+            i = i + 1;
+        }
+        return i;
+    }
+
     pub fn skip_ws() -> Result<(), JsonError> {
+        let b = self.bytes;
+        let i = self.i;
+        while i < b.len() {
+            let c = b[i];
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                i = i + 1;
+                continue;
+            }
+            break;
+        }
+        self.i = i;
         while !self.at_end() {
             let c = self.cur();
             if c == " " || c == "\t" || c == "\n" || c == "\r" {
@@ -581,13 +605,16 @@ impl Parser {
             if n == "/" {
                 self.bump();
                 self.bump();
-                while !self.at_end() {
-                    let x = self.cur();
+                let b = self.bytes;
+                let i = self.i;
+                while i < b.len() {
+                    let x = b[i];
                     if x == "\n" || x == "\r" {
                         break;
                     }
-                    self.bump();
+                    i = i + 1;
                 }
+                self.i = i;
                 continue;
             }
             if n != "*" {
@@ -767,12 +794,29 @@ impl Parser {
         }
         self.bump();
         let out: Vec<byte> = Vec::with_capacity(32);
+        let b = self.bytes;
+        let n = b.len();
         while true {
-            if self.at_end() {
+            let i = self.i;
+            let s = i;
+            while i < n {
+                let c = b[i];
+                if c == "\"" || c == "\\" || c < " " {
+                    break;
+                }
+                i = i + 1;
+            }
+            let j = s;
+            while j < i {
+                out.push(b[j]);
+                j = j + 1;
+            }
+            self.i = i;
+            if i >= n {
                 self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
             }
-            let c = self.cur();
+            let c = b[i];
             if c == "\"" {
                 self.bump();
                 break;
@@ -782,12 +826,8 @@ impl Parser {
                 self.parse_escape(out)?;
                 continue;
             }
-            if c < " " {
-                self.mark();
+            self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
-            }
-            out.push(c);
-            self.bump();
         }
         return match from_bytes(out) {
             Result::Ok(s) => s,
@@ -962,8 +1002,11 @@ impl Parser {
             raise JsonError::Invalid { line: self.line, column: self.col };
             }
         } else {
-            while self.peek_digit() {
-                let d: int = (self.cur() as int) - ("0" as byte as int);
+            let b = self.bytes;
+            let i = self.i;
+            let end = self.digits_end(i);
+            while i < end {
+                let d: int = (b[i] as int) - ("0" as byte as int);
                 if !overflow {
                     let next = value * ten + d;
                     if value > 0 {
@@ -975,8 +1018,9 @@ impl Parser {
                         value = next;
                     }
                 }
-                self.bump();
+                i = i + 1;
             }
+            self.i = end;
         }
         let is_float = false;
         if self.peek_eq(".") {
@@ -986,9 +1030,7 @@ impl Parser {
                 self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
             }
-            while self.peek_digit() {
-                self.bump();
-            }
+            self.i = self.digits_end(self.i);
         }
         if !self.at_end() {
             if self.cur() == "e" || self.cur() == "E" {
@@ -1003,9 +1045,7 @@ impl Parser {
                     self.mark();
             raise JsonError::Invalid { line: self.line, column: self.col };
                 }
-                while self.peek_digit() {
-                    self.bump();
-                }
+                self.i = self.digits_end(self.i);
             }
         }
         let end = self.i;
