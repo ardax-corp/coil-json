@@ -207,3 +207,8 @@ test("unterminated string is invalid") {
 test("raw control char in string is invalid") {
     assert!(is_invalid(codec().decode_str("\"a\nb\"")), "raw newline");
 }
+
+test("long runs around escapes") {
+    let v = must_decode("\"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\"");
+    assert!(v.is_string() && v.s == "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", "long runs");
+}

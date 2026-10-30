@@ -798,18 +798,13 @@ impl Parser {
         let n = b.len();
         while true {
             let i = self.i;
-            let s = i;
             while i < n {
                 let c = b[i];
                 if c == "\"" || c == "\\" || c < " " {
                     break;
                 }
+                out.push(c);
                 i = i + 1;
-            }
-            let j = s;
-            while j < i {
-                out.push(b[j]);
-                j = j + 1;
             }
             self.i = i;
             if i >= n {
