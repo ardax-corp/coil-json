@@ -153,7 +153,7 @@ enum JsonError {
     Number { line: int, column: int },
 }
 
-/// Internal parser state used by `Json::decode`; not meant to be used directly.
+// Internal parser state used by `Json::decode`; not meant to be used directly.
 class Parser {
     bytes: Vec<byte>,
     i: int,
