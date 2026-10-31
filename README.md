@@ -2,20 +2,36 @@
 
 Userland JSON for [coil](https://github.com/ardax-corp/coil-lang). Package name is `json`, so `use json::{Json, JsonValue, JsonError}` resolves here.
 
-This package owns one-shot encode/decode ([COI-55](https://linear.app/ardax/issue/COI-55)) and JSONC parse mode ([COI-56](https://linear.app/ardax/issue/COI-56)). coil-stdlib must not `use json`. There is no `src/codec/json.hy` here or in stdlib.
+Pure Coil, no native library. One module, `json` (`src/json.hy`): the `Json` codec, the `JsonValue` handle it decodes to, and the `JsonError` it reports.
 
-## API
+## Example
 
 ```coil
 use json::{Json, JsonValue, JsonError};
+use io::sync::{println};
+use string::{format};
 
-let j = Json::strict();
-let v = j.decode_str("{\"a\":[1,true,null]}")?;
-let bytes = j.encode(v)?;
-
-let c = Json::jsonc();
-let v2 = c.decode_str("// cfg\n{ \"a\": 1, }")?;
+fn main() {
+    let j = Json::strict();
+    match j.decode_str("{\"name\":\"coil\",\"tags\":[\"vm\",\"lang\"]}") {
+        Result::Ok(v) => {
+            let name = v.get("name").map_or("?", fn (JsonValue n) => n.as_str().unwrap_or("?"));
+            println(name)?;
+            println(j.encode_str(v).unwrap_or("encode failed"))?;
+        },
+        Result::Err(JsonError::Invalid { line, column }) => {
+            println(format("invalid JSON at %i:%i", line, column))?;
+        },
+        Result::Err(_) => {
+            println("bad number or UTF-8")?;
+        },
+    }
+}
 ```
+
+Run it with `coil --root ../coil-stdlib/src --root ../coil-json/src main.hy` (prints `coil`, then the compact document).
+
+## API
 
 `Json::strict()` is RFC 8259 only. `Json::jsonc()` is parse-only sugar: comments and trailing commas on decode; encode stays RFC 8259; not JSON5. Invalid input returns `JsonError` with 1-based line/column (`Invalid`, `Utf8`, `Number`), not panic.
 
@@ -56,7 +72,15 @@ Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise f
 spool add json --git https://github.com/ardax-corp/coil-json.git --rev <commit SHA>
 ```
 
-No tags yet, so pin a commit. Without spool, pass `--root ../coil-json/src` to `coil`. Call `Json::strict()` from [docs/consume.md](docs/consume.md).
+No tags yet, so pin a commit. Without spool, pass `--root ../coil-json/src` to `coil`. More call patterns are in [docs/consume.md](docs/consume.md).
+
+## Test
+
+```bash
+coil test --root ../coil-stdlib/src
+```
+
+This runs `tests/` and the examples in the `///` docs of `src/json.hy`.
 
 ## License
 
