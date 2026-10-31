@@ -106,7 +106,7 @@ match j.decode_str("{") {
 }
 ```
 
-`Number` and `Utf8` are on the enum. Extra cases are [COI-222](https://linear.app/ardax/issue/COI-222).
+`Number` and `Utf8` are on the enum.
 
 ### stdlib
 

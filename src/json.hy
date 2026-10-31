@@ -1,8 +1,13 @@
-// Package root. Coil-side encode/decode (COI-55) plus jsonc parse mode (COI-56). Native FFI is COI-53.
-// Named-module recursive `Vec<JsonValue>` does not unify (`JsonValue` vs `json::JsonValue`).
-// The tree is an arena of primitive vecs; JsonValue is a (store, idx) handle.
+// JSON (RFC 8259) encode and decode in pure Coil, plus a JSONC parse mode.
+//
+// `Json` is the codec, `JsonValue` a handle on a decoded or built value, and
+// `JsonError` the failure with a 1-based line and column.
+// Named-module recursive `Vec<JsonValue>` does not unify (`JsonValue` vs
+// `json::JsonValue`), so the tree is an arena of primitive vecs (`Store`) and a
+// `JsonValue` is a (store, idx) handle.
 use string::{from_bytes, to_bytes, format};
 
+// Internal arena storage behind `JsonValue`; not meant to be used directly.
 class Store {
     pub tags: Vec<int>,
     pub flags: Vec<bool>,
@@ -72,24 +77,83 @@ impl Store {
     }
 }
 
-/// Strict JSON value. Objects are ordered children (`keys[child]` / child nodes).
+/// A JSON value: null, bool, int, float, string, array or object.
+///
+/// `JsonValue` is a handle on one node of a decoded tree (or of a scalar built
+/// with `null` / `from_*`), not an enum. Ask its type with the `is_*`
+/// predicates, read scalars with `as_str` / `as_int` / `as_float` /
+/// `as_bool`, and walk containers with `get`, `at` and `keys`.
+///
+/// Objects keep their members in document order, and duplicate keys are kept
+/// (`get` returns the first). A number token with no `.`, `e` or `E` that fits
+/// in an `int` decodes as an int; every other number is a float.
+///
+/// Arrays and objects come only from `Json::decode`; there is no builder for
+/// them.
+///
+/// # Examples
+///
+/// ```
+/// use json::{Json, JsonValue};
+/// # use tests::assert;
+/// let v = Json::strict()
+///     .decode_str("{\"name\":\"coil\",\"tags\":[\"vm\",\"lang\"],\"stars\":7}")
+///     .unwrap_or(JsonValue::null());
+/// assert!(v.is_object());
+/// assert!(v.keys().len() == 3);
+/// assert!(v.get("stars").map_or(0, fn (JsonValue n) => n.as_int().unwrap_or(0)) == 7);
+/// let tags = v.get("tags").unwrap_or(JsonValue::null());
+/// assert!(tags.array_len() == 2);
+/// assert!(tags.at(1).map_or("", fn (JsonValue t) => t.as_str().unwrap_or("")) == "lang");
+/// ```
 class JsonValue {
     store: Store,
     idx: int,
     tag: int,
+    /// The boolean payload. Meaningful only when `is_bool()`; prefer `as_bool`.
     pub flag: bool,
+    /// The integer payload. Meaningful only when `is_int()`; prefer `as_int`.
     pub i: int,
+    /// The float payload. Meaningful only when `is_float()`; prefer `as_float`.
     pub f: float,
+    /// The string payload. Meaningful only when `is_string()`; prefer `as_str`.
     pub s: string,
 }
 
-/// Decode/encode failure. `line` and `column` are 1-based (column counts bytes in the line).
+/// Why a decode or encode failed.
+///
+/// Every variant carries the position of the failure: `line` and `column` are
+/// 1-based, and `column` counts bytes within the line. Malformed input is
+/// always reported as an error, never as a panic.
+///
+/// # Examples
+///
+/// ```
+/// use json::{Json, JsonError};
+/// use string::{format};
+/// # use tests::assert;
+/// let pos = match Json::strict().decode_str("[1,\n 2,]") {
+///     Result::Ok(_) => "decoded",
+///     Result::Err(e) => match e {
+///         JsonError::Invalid { line, column } => format("invalid at %i:%i", line, column),
+///         default => "other error",
+///     },
+/// };
+/// assert!(pos == "invalid at 2:4");
+/// ```
 enum JsonError {
+    /// The input is not JSON: a syntax error, an unexpected byte, trailing
+    /// data after the value, or empty input.
     Invalid { line: int, column: int },
+    /// A string is not valid UTF-8, or an encoded document could not be read
+    /// back as a `string` (`Json::encode_str`).
     Utf8 { line: int, column: int },
+    /// A number overflows, or a float is not finite (JSON has no `inf` or
+    /// `NaN`).
     Number { line: int, column: int },
 }
 
+// Internal parser state used by `Json::decode`; not meant to be used directly.
 class Parser {
     bytes: Vec<byte>,
     i: int,
@@ -100,6 +164,7 @@ class Parser {
 }
 
 impl JsonValue {
+    // Internal: a handle on node `idx` of `store`, used by the decoder.
     pub static fn wrap(Store store, int idx) -> JsonValue {
         return new JsonValue(
             store,
@@ -112,74 +177,135 @@ impl JsonValue {
         );
     }
 
+    /// The JSON `null` value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = JsonValue::null();
+    /// assert!(v.is_null());
+    /// assert!(Json::strict().encode_str(v).unwrap_or("") == "null");
+    /// ```
     pub static fn null() -> JsonValue {
         let st = Store::new();
         let idx = st.add(0, false, 0, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
+    /// A JSON boolean (`true` or `false`).
     pub static fn from_bool(bool flag) -> JsonValue {
         let st = Store::new();
         let idx = st.add(1, flag, 0, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
+    /// A JSON integer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = JsonValue::from_int(-7);
+    /// assert!(v.as_int().unwrap_or(0) == -7);
+    /// assert!(Json::strict().encode_str(v).unwrap_or("") == "-7");
+    /// ```
     pub static fn from_int(int n) -> JsonValue {
         let st = Store::new();
         let idx = st.add(2, false, n, 0.0, "", "");
         return JsonValue::wrap(st, idx);
     }
 
+    /// A JSON float.
+    ///
+    /// Encoding a non-finite float (`inf`, `NaN`) fails with
+    /// `JsonError::Number`, since JSON cannot represent it.
     pub static fn from_float(float x) -> JsonValue {
         let st = Store::new();
         let idx = st.add(3, false, 0, x, "", "");
         return JsonValue::wrap(st, idx);
     }
 
+    /// A JSON string. Encoding escapes quotes, backslashes and control
+    /// characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = JsonValue::from_string("say \"hi\"");
+    /// assert!(Json::strict().encode_str(v).unwrap_or("") == "\"say \\\"hi\\\"\"");
+    /// ```
     pub static fn from_string(string s) -> JsonValue {
         let st = Store::new();
         let idx = st.add(4, false, 0, 0.0, s, "");
         return JsonValue::wrap(st, idx);
     }
 
+    /// Returns `true` for `null`.
     pub fn is_null() -> bool {
         return self.tag == 0;
     }
 
+    /// Returns `true` for `true` or `false`.
     pub fn is_bool() -> bool {
         return self.tag == 1;
     }
 
+    /// Returns `true` for an integer (a number with no fraction or exponent
+    /// that fits in an `int`).
     pub fn is_int() -> bool {
         return self.tag == 2;
     }
 
+    /// Returns `true` for a float (any number that is not an int).
     pub fn is_float() -> bool {
         return self.tag == 3;
     }
 
+    /// Returns `true` for a string.
     pub fn is_string() -> bool {
         return self.tag == 4;
     }
 
+    /// Returns `true` for an array.
     pub fn is_array() -> bool {
         return self.tag == 5;
     }
 
+    /// Returns `true` for an object.
     pub fn is_object() -> bool {
         return self.tag == 6;
     }
 
+    /// Number of elements of an array. Use only when `is_array()`: on any
+    /// other value the result is meaningless.
     pub fn array_len() -> int {
         return self.store.ints[self.idx];
     }
 
+    /// Number of members of an object, duplicates included. Use only when
+    /// `is_object()`: on any other value the result is meaningless.
     pub fn object_len() -> int {
         return self.store.ints[self.idx];
     }
 
     /// Member `key` of an object (the first one when keys repeat).
-    /// `None` when absent or when this is not an object.
+    ///
+    /// Returns `None` when the key is absent or this is not an object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = Json::strict().decode_str("{\"a\":1,\"a\":2}").unwrap_or(JsonValue::null());
+    /// assert!(v.get("a").map_or(0, fn (JsonValue x) => x.as_int().unwrap_or(0)) == 1);
+    /// assert!(v.get("b").is_none());
+    /// ```
     pub fn get(string key) -> Option<JsonValue> {
         if self.tag != 6 {
             return Option::None;
@@ -194,7 +320,19 @@ impl JsonValue {
         return Option::None;
     }
 
-    /// Element `i` of an array. `None` when out of range or not an array.
+    /// Element `i` (0-based) of an array.
+    ///
+    /// Returns `None` when `i` is out of range or this is not an array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = Json::strict().decode_str("[true,false]").unwrap_or(JsonValue::null());
+    /// assert!(v.at(0).map_or(false, fn (JsonValue x) => x.as_bool().unwrap_or(false)));
+    /// assert!(v.at(2).is_none());
+    /// ```
     pub fn at(int i) -> Option<JsonValue> {
         if self.tag != 5 || i < 0 {
             return Option::None;
@@ -211,7 +349,19 @@ impl JsonValue {
         return Option::None;
     }
 
-    /// Member names of an object in document order (empty otherwise).
+    /// Member names of an object in document order, duplicates included.
+    ///
+    /// Returns an empty `Vec` when this is not an object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = Json::strict().decode_str("{\"b\":1,\"a\":2}").unwrap_or(JsonValue::null());
+    /// let ks = v.keys();
+    /// assert!(ks.len() == 2 && ks[0] == "b" && ks[1] == "a");
+    /// ```
     pub fn keys() -> Vec<string> {
         let out: Vec<string> = Vec::new();
         if self.tag != 6 {
@@ -225,6 +375,16 @@ impl JsonValue {
         return out;
     }
 
+    /// The string, or `None` when this is not a string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{JsonValue};
+    /// # use tests::assert;
+    /// assert!(JsonValue::from_string("hi").as_str().unwrap_or("") == "hi");
+    /// assert!(JsonValue::from_int(1).as_str().is_none());
+    /// ```
     pub fn as_str() -> Option<string> {
         if self.tag != 4 {
             return Option::None;
@@ -232,6 +392,8 @@ impl JsonValue {
         return Option::Some(self.s);
     }
 
+    /// The integer, or `None` when this is not an int (a float such as `1.0`
+    /// is not converted).
     pub fn as_int() -> Option<int> {
         if self.tag != 2 {
             return Option::None;
@@ -239,6 +401,8 @@ impl JsonValue {
         return Option::Some(self.i);
     }
 
+    /// The float, or `None` when this is not a float (an int such as `1` is
+    /// not converted).
     pub fn as_float() -> Option<float> {
         if self.tag != 3 {
             return Option::None;
@@ -246,6 +410,7 @@ impl JsonValue {
         return Option::Some(self.f);
     }
 
+    /// The boolean, or `None` when this is not a bool.
     pub fn as_bool() -> Option<bool> {
         if self.tag != 1 {
             return Option::None;
@@ -476,10 +641,15 @@ impl JsonValue {
         raise JsonError::Invalid { line: 1, column: 1 };
     }
 
+    /// Appends the compact encoding of this value to `out`.
+    ///
+    /// Fails with `JsonError::Number` on a non-finite float; `out` may then
+    /// hold a partial encoding.
     pub fn emit(Vec<byte> out) -> Result<(), JsonError> {
         return self.emit_idx(out, self.idx)?;
     }
 
+    /// The compact encoding of this value, as `Json::encode` returns it.
     pub fn encode_buf() -> Result<Vec<byte>, JsonError> {
         let n = self.store.tags.len() * 8;
         if n < 16 {
@@ -503,7 +673,7 @@ impl Parser {
         self.i = self.i + 1;
     }
 
-    /// Fill `line` and `column` from a byte offset. Used when raising.
+    // Fill `line` and `column` from a byte offset. Used when raising.
     pub fn mark_at(int at) {
         let line = 1;
         let col = 1;
@@ -548,7 +718,7 @@ impl Parser {
         return self.bytes[self.i];
     }
 
-    /// Coil `&&` / `||` evaluate both sides; never pair `at_end` with `cur()` in one expr.
+    // Coil `&&` / `||` evaluate both sides; never pair `at_end` with `cur()` in one expr.
     fn peek_eq(byte c) -> bool {
         if self.at_end() {
             return false;
@@ -1190,26 +1360,81 @@ impl Parser {
     }
 }
 
-/// RFC 8259 codec. `Json::jsonc()` is parse-only sugar on the same parser.
+/// A JSON codec: one-shot decode of bytes or a string to a `JsonValue`, and
+/// compact encode back.
+///
+/// `Json::strict()` accepts RFC 8259 only. `Json::jsonc()` also accepts
+/// `//` and `/* */` comments and trailing commas on decode (JSONC, not
+/// JSON5); both encode the same strict, compact JSON with no extra spaces.
+/// Failures are a `JsonError` with the line and column, never a panic.
+///
+/// # Examples
+///
+/// ```
+/// use json::{Json, JsonValue, JsonError};
+/// # use tests::assert;
+/// let j = Json::strict();
+/// let out = match j.decode_str("{ \"a\": [1, true, null] }") {
+///     Result::Ok(v) => j.encode_str(v).unwrap_or("encode failed"),
+///     Result::Err(_) => "decode failed",
+/// };
+/// assert!(out == "{\"a\":[1,true,null]}");
+///
+/// let cfg = Json::jsonc().decode_str("// settings\n{ \"debug\": true, }");
+/// assert!(cfg.is_ok());
+/// assert!(j.decode_str("// settings\n{ \"debug\": true, }").is_err());
+/// ```
 class Json {
     mode: int,
 }
 
 impl Json {
-    /// Strict RFC 8259 mode. Rejects comments and trailing commas.
+    /// The strict RFC 8259 codec. Decode rejects comments and trailing commas.
     pub static fn strict() -> Json {
         return new Json(0);
     }
 
-    /// JSONC decode: `//` / `/* */` comments and trailing commas. Encode is still RFC 8259.
+    /// The JSONC codec: decode also accepts `//` and `/* */` comments and
+    /// trailing commas in arrays and objects. Encode is still strict RFC 8259.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = Json::jsonc()
+    ///     .decode_str("{\n  /* port */ \"port\": 8080, // default\n}")
+    ///     .unwrap_or(JsonValue::null());
+    /// assert!(v.get("port").is_some());
+    /// ```
     pub static fn jsonc() -> Json {
         return new Json(1);
     }
 
+    /// Encodes `value` as compact UTF-8 JSON bytes.
+    ///
+    /// Fails with `JsonError::Number` when the value holds a non-finite float.
     pub fn encode(JsonValue value) -> Result<Vec<byte>, JsonError> {
         return value.encode_buf()?;
     }
 
+    /// Decodes one JSON document from `bytes`.
+    ///
+    /// Whitespace may surround the value; anything else after it is
+    /// `JsonError::Invalid`, as is empty input. Bad UTF-8 in a string is
+    /// `JsonError::Utf8`, and a number that overflows a float is
+    /// `JsonError::Number`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// use string::{to_bytes};
+    /// # use tests::assert;
+    /// let v = Json::strict().decode(to_bytes("[1, 2.5]")).unwrap_or(JsonValue::null());
+    /// assert!(v.at(0).map_or(false, fn (JsonValue x) => x.is_int()));
+    /// assert!(v.at(1).map_or(false, fn (JsonValue x) => x.is_float()));
+    /// ```
     pub fn decode(Vec<byte> bytes) -> Result<JsonValue, JsonError> {
         let jsonc = self.mode == 1;
         let guess = bytes.len() / 8;
@@ -1223,6 +1448,11 @@ impl Json {
         return JsonValue::wrap(p.store, root);
     }
 
+    /// Encodes `value` as a compact JSON `string`: `encode`, then the bytes
+    /// read as UTF-8.
+    ///
+    /// Fails like `encode`, or with `JsonError::Utf8` when the encoded bytes
+    /// are not valid UTF-8.
     pub fn encode_str(JsonValue value) -> Result<string, JsonError> {
         let bytes = self.encode(value)?;
         return match from_bytes(bytes) {
@@ -1231,6 +1461,7 @@ impl Json {
         };
     }
 
+    /// Decodes one JSON document from a string; same as `decode` on its bytes.
     pub fn decode_str(string s) -> Result<JsonValue, JsonError> {
         return self.decode(to_bytes(s))?;
     }
