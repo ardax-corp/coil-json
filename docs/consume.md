@@ -1,6 +1,6 @@
 # Consuming coil-json
 
-This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.hy`. Strict one-shot encode/decode ships here. coil-stdlib is not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
+This package is `json`. `use json::{Json, JsonValue, JsonError}` resolves from `src/json.coil`. Strict one-shot encode/decode ships here. coil-stdlib is not a dependency of this package. Do not add a `codec` spool dep. Do not `use json` from stdlib.
 
 ## Depend on it
 
@@ -15,12 +15,12 @@ This repo has no tags, so pin a commit with `--rev`. spool records the dep in `c
 Without spool, clone this repo next to your project and pass the roots yourself. coil reads no `coil.toml` and no `coil.lock`.
 
 ```bash
-coil --root ../coil-json/src main.hy
+coil --root ../coil-json/src main.coil
 ```
 
 ## Call Json::strict()
 
-Signatures are in [`src/json.hy`](../src/json.hy). Call patterns are in [`tests/strict.hy`](../tests/strict.hy). `Json::strict()` is RFC 8259 one-shot.
+Signatures are in [`src/json.coil`](../src/json.coil). Call patterns are in [`tests/strict.coil`](../tests/strict.coil). `Json::strict()` is RFC 8259 one-shot.
 
 `Json::jsonc()` is parse-only sugar: comments and trailing commas on decode. Encode stays RFC 8259. Not JSON5.
 
@@ -94,7 +94,7 @@ enum JsonError {
 }
 ```
 
-`line` and `column` are 1-based. Column counts bytes in the line. Malformed input returns `JsonError::Invalid` with position, not a panic. `tests/strict.hy` matches `Invalid` for empty input at 1,1, a trailing comma on line 2, a leading zero, and trailing junk.
+`line` and `column` are 1-based. Column counts bytes in the line. Malformed input returns `JsonError::Invalid` with position, not a panic. `tests/strict.coil` matches `Invalid` for empty input at 1,1, a trailing comma on line 2, a leading zero, and trailing junk.
 
 ```coil
 match j.decode_str("{") {
@@ -110,4 +110,4 @@ match j.decode_str("{") {
 
 ### stdlib
 
-coil-stdlib must never `use json`. There is no `src/codec/json.hy` here or in stdlib. Do not add a `codec` spool dep.
+coil-stdlib must never `use json`. There is no `src/codec/json.coil` here or in stdlib. Do not add a `codec` spool dep.

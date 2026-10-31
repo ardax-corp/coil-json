@@ -1,3 +1,4 @@
 .spool/
 native/
+*.ccoil
 *.hyc
