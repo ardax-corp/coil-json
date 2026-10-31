@@ -92,6 +92,15 @@ test("int and float") {
     assert!(must_encode(JsonValue::from_int(7)) == "7");
 }
 
+test("integer that overflows int decodes as a float") {
+    let big = must_decode("99999999999999999999");
+    assert!(big.is_float() && big.f > 99000000000000000000.0 && big.f < 110000000000000000000.0, "positive overflow");
+    let neg = must_decode("-99999999999999999999");
+    assert!(neg.is_float() && neg.f < 0.0 - 99000000000000000000.0, "negative overflow");
+    let max = must_decode("9223372036854775807");
+    assert!(max.is_int() && max.i == 9223372036854775807, "int max stays int");
+}
+
 test("round-trip nested object and array") {
     let src = "{\"a\":[1,true,null],\"b\":\"x\"}";
     let v = must_decode(src);
