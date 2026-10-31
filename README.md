@@ -57,7 +57,7 @@ Reading a decoded value:
 
 Object representation: ordered children. Each object member is a child node whose `keys[child]` is the member name. Duplicates are kept in encounter order. Not a HashMap.
 
-Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise float. Overflow and non-finite floats are `JsonError::Number`.
+Numbers: a token with no `.` / `e` / `E` that fits in i64 is an int; otherwise it is a float. A float that is not finite is `JsonError::Number`.
 
 ## Layout
 
