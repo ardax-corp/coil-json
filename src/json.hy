@@ -7,7 +7,7 @@
 // `JsonValue` is a (store, idx) handle.
 use string::{from_bytes, to_bytes, format};
 
-/// Internal arena storage behind `JsonValue`; not meant to be used directly.
+// Internal arena storage behind `JsonValue`; not meant to be used directly.
 class Store {
     pub tags: Vec<int>,
     pub flags: Vec<bool>,
@@ -164,7 +164,7 @@ class Parser {
 }
 
 impl JsonValue {
-    /// Handle on node `idx` of `store`. Internal: used by the decoder.
+    // Internal: a handle on node `idx` of `store`, used by the decoder.
     pub static fn wrap(Store store, int idx) -> JsonValue {
         return new JsonValue(
             store,
