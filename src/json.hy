@@ -148,8 +148,8 @@ enum JsonError {
     /// A string is not valid UTF-8, or an encoded document could not be read
     /// back as a `string` (`Json::encode_str`).
     Utf8 { line: int, column: int },
-    /// A number overflows, or a float is not finite (JSON has no `inf` or
-    /// `NaN`).
+    /// A number is too large for a finite float (JSON has no `inf` or
+    /// `NaN`). An integer too large for `int` decodes as a float instead.
     Number { line: int, column: int },
 }
 
@@ -1106,42 +1106,6 @@ impl Parser {
         return scaled;
     }
 
-    fn parse_int_slice(int start, int end, int line, int column) -> Result<int, JsonError> {
-        let ten: int = 10;
-        let i = start;
-        let negative = false;
-        if i < end {
-            if self.bytes[i] == "-" {
-                negative = true;
-                i = i + 1;
-            }
-        }
-        if i >= end {
-            self.mark_at(start);
-            raise JsonError::Number { line: self.line, column: self.col };
-        }
-        let value = 0;
-        while i < end {
-            let d: int = (self.bytes[i] as int) - ("0" as byte as int);
-            let next = value * ten + d;
-            if value > 0 {
-                if next < value {
-                    self.mark_at(start);
-            raise JsonError::Number { line: self.line, column: self.col };
-                }
-            }
-            value = next;
-            i = i + 1;
-        }
-        if negative {
-            if value == 0 {
-                return 0;
-            }
-            return 0 - value;
-        }
-        return value;
-    }
-
     fn parse_number() -> Result<int, JsonError> {
         let line = self.line;
         let col = self.col;
@@ -1173,14 +1137,11 @@ impl Parser {
             while i < end {
                 let d: int = (b[i] as int) - ("0" as byte as int);
                 if !overflow {
-                    let next = value * ten + d;
-                    if value > 0 {
-                        if next < value {
-                            overflow = true;
-                        }
-                    }
-                    if !overflow {
-                        value = next;
+                    // Check before multiplying: integer overflow panics.
+                    if value > (9223372036854775807 - d) / ten {
+                        overflow = true;
+                    } else {
+                        value = value * ten + d;
                     }
                 }
                 i = i + 1;
@@ -1214,13 +1175,9 @@ impl Parser {
             }
         }
         let end = self.i;
-        if is_float {
+        if is_float || overflow {
             let f = self.parse_float_slice(start, end, line, col)?;
             return self.store.add(3, false, 0, f, "", "");
-        }
-        if overflow {
-            self.mark_at(start);
-            raise JsonError::Number { line: self.line, column: self.col };
         }
         if negative {
             if value != 0 {
