@@ -1106,42 +1106,6 @@ impl Parser {
         return scaled;
     }
 
-    fn parse_int_slice(int start, int end, int line, int column) -> Result<int, JsonError> {
-        let ten: int = 10;
-        let i = start;
-        let negative = false;
-        if i < end {
-            if self.bytes[i] == "-" {
-                negative = true;
-                i = i + 1;
-            }
-        }
-        if i >= end {
-            self.mark_at(start);
-            raise JsonError::Number { line: self.line, column: self.col };
-        }
-        let value = 0;
-        while i < end {
-            let d: int = (self.bytes[i] as int) - ("0" as byte as int);
-            let next = value * ten + d;
-            if value > 0 {
-                if next < value {
-                    self.mark_at(start);
-            raise JsonError::Number { line: self.line, column: self.col };
-                }
-            }
-            value = next;
-            i = i + 1;
-        }
-        if negative {
-            if value == 0 {
-                return 0;
-            }
-            return 0 - value;
-        }
-        return value;
-    }
-
     fn parse_number() -> Result<int, JsonError> {
         let line = self.line;
         let col = self.col;
