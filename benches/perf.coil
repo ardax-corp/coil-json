@@ -1,5 +1,5 @@
 // Decode/encode timing. Not part of `coil test`.
-// Run: coil --opt-level aggressive benches/perf.hy
+// Run: coil --opt-level aggressive benches/perf.coil
 use json::{Json, JsonValue};
 use clock::{mono_nanos};
 use io::{stdout, write};
