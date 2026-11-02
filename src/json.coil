@@ -6,6 +6,7 @@
 // `json::JsonValue`), so the tree is an arena of primitive vecs (`Store`) and a
 // `JsonValue` is a (store, idx) handle.
 use string::{from_bytes, to_bytes, format};
+use key_index::{table as ki_table, probe as ki_probe, insert as ki_insert};
 
 // Internal arena storage behind `JsonValue`; not meant to be used directly.
 class Store {
@@ -18,7 +19,20 @@ class Store {
     pub first: Vec<int>,
     last: Vec<int>,
     pub next: Vec<int>,
+    // Member index of the objects with at least `INDEXED` members (their
+    // `flags` entry is set): one `key_index` table for the whole store,
+    // keyed by the member's key hash mixed with its object; each slot's
+    // object and member node.
+    ix: Vec<int>,
+    ix_hashes: Vec<int>,
+    ix_live: Vec<int>,
+    ix_obj: Vec<int>,
+    ix_node: Vec<int>,
 }
+
+// Objects with this many members get a member index when decoded; smaller
+// ones are searched in member order.
+const INDEXED: int = 32;
 
 impl Store {
     pub static fn with_capacity(int n) -> Store {
@@ -35,7 +49,22 @@ impl Store {
         let first: Vec<int> = Vec::with_capacity(cap);
         let last: Vec<int> = Vec::with_capacity(cap);
         let next: Vec<int> = Vec::with_capacity(cap);
-        return new Store(tags, flags, ints, floats, strs, keys, first, last, next);
+        return new Store(
+            tags,
+            flags,
+            ints,
+            floats,
+            strs,
+            keys,
+            first,
+            last,
+            next,
+            ki_table(0),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
     }
 
     pub static fn new() -> Store {
@@ -64,6 +93,58 @@ impl Store {
             self.next[self.last[parent]] = child;
             self.last[parent] = child;
         }
+    }
+
+    // The probe hash of member `key` of object `obj`.
+    static fn member_hash(int obj, string key) -> int {
+        return key.hash() ^ (obj * 40503);
+    }
+
+    // Member `key` of indexed object `obj` (its node), or `-1`.
+    pub fn find_member(int obj, string key) -> int {
+        let h = Store::member_hash(obj, key);
+        let s = ki_probe(self.ix, self.ix_hashes, h, -1);
+        while s >= 0 && (self.ix_obj[s] != obj || self.keys[self.ix_node[s]] != key) {
+            s = ki_probe(self.ix, self.ix_hashes, h, s);
+        }
+        if s < 0 {
+            return -1;
+        }
+        return self.ix_node[s];
+    }
+
+    // Member `key` of object `obj` (the first one when keys repeat), or
+    // `-1`.
+    pub fn member(int obj, string key) -> int {
+        if self.flags[obj] {
+            return self.find_member(obj, key);
+        }
+        let c = self.first[obj];
+        while c >= 0 && self.keys[c] != key {
+            c = self.next[c];
+        }
+        return c;
+    }
+
+    // Index the members of object `obj`; a repeated key keeps its first
+    // member, as a search in member order finds.
+    pub fn index_object(int obj) {
+        let c = self.first[obj];
+        while c >= 0 {
+            let key = self.keys[c];
+            if self.find_member(obj, key) < 0 {
+                let _ = ki_insert(
+                    self.ix,
+                    self.ix_hashes,
+                    self.ix_live,
+                    Store::member_hash(obj, key),
+                );
+                self.ix_obj.push(obj);
+                self.ix_node.push(c);
+            }
+            c = self.next[c];
+        }
+        self.flags[obj] = true;
     }
 
     pub fn count_children(int idx) -> int {
@@ -310,14 +391,11 @@ impl JsonValue {
         if self.tag != 6 {
             return Option::None;
         }
-        let c = self.store.first[self.idx];
-        while c >= 0 {
-            if self.store.keys[c] == key {
-                return Option::Some(JsonValue::wrap(self.store, c));
-            }
-            c = self.store.next[c];
+        let m = self.store.member(self.idx, key);
+        if m < 0 {
+            return Option::None;
         }
-        return Option::None;
+        return Option::Some(JsonValue::wrap(self.store, m));
     }
 
     /// Element `i` (0-based) of an array.
@@ -1310,6 +1388,9 @@ impl Parser {
             raise JsonError::Invalid { line: self.line, column: self.col };
             }
             self.store.ints[obj] = count;
+            if count >= INDEXED {
+                self.store.index_object(obj);
+            }
             return obj;
         }
         self.mark();
