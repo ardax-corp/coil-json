@@ -96,3 +96,33 @@ test("as_* match only their own type") {
     };
     assert!(got == 1.5, "float");
 }
+
+test("get on large objects, nested and with a repeated key") {
+    let s = "{";
+    let i = 0;
+    while i < 100 {
+        s = s + "\"k" + i.show() + "\":" + i.show() + ",";
+        i = i + 1;
+    }
+    s = s + "\"k5\":-5,\"inner\":{";
+    i = 0;
+    while i < 40 {
+        if i > 0 {
+            s = s + ",";
+        }
+        s = s + "\"k" + i.show() + "\":" + (i * 10).show();
+        i = i + 1;
+    }
+    s = s + "}}";
+    let v = must_decode(s);
+    i = 0;
+    while i < 100 {
+        assert!(int_of(v.get("k" + i.show())) == i);
+        i = i + 1;
+    }
+    let inner = v.get("inner").unwrap_or(JsonValue::null());
+    assert!(int_of(inner.get("k7")) == 70);
+    assert!(inner.get("k40").is_none());
+    assert!(v.get("k100").is_none());
+    assert!(v.keys().len() == 102);
+}
