@@ -647,7 +647,6 @@ impl JsonValue {
         return ();
     }
 
-    #[max_depth(256)]
     fn emit_idx(Vec<byte> out, int idx) -> Result<(), JsonError> {
         let tag = self.store.tags[idx];
         if tag == 0 {
@@ -1279,7 +1278,6 @@ impl Parser {
         return self.store.add(tag, flag, 0, 0.0, "", "");
     }
 
-    #[max_depth(256)]
     pub fn parse_value() -> Result<int, JsonError> {
         self.skip_ws()?;
         if self.at_end() {
