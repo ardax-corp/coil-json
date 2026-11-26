@@ -126,3 +126,41 @@ test("get on large objects, nested and with a repeated key") {
     assert!(v.get("k100").is_none());
     assert!(v.keys().len() == 102);
 }
+
+test("at on large and nested arrays") {
+    let s = "[";
+    let i = 0;
+    while i < 100 {
+        s = s + "[" + i.show() + "," + (i * 2).show() + "],";
+        i = i + 1;
+    }
+    s = s + "[]]";
+    let v = must_decode(s);
+    assert!(v.array_len() == 101);
+    i = 0;
+    while i < 100 {
+        let row = v.at(i).unwrap_or(JsonValue::null());
+        assert!(row.array_len() == 2);
+        assert!(int_of(row.at(0)) == i);
+        assert!(int_of(row.at(1)) == i * 2);
+        assert!(is_absent(row.at(2)));
+        i = i + 1;
+    }
+    assert!(v.at(100).map_or(-1, fn (JsonValue x) => x.array_len()) == 0);
+    assert!(is_absent(v.at(101)));
+    assert!(is_absent(v.at(-1)));
+}
+
+test("items walks array elements and object values in order") {
+    let a = must_decode("[3,\"x\",[1],{\"k\":2}]").items();
+    assert!(a.len() == 4);
+    assert!(int_of(Option::Some(a[0])) == 3);
+    assert!(str_of(Option::Some(a[1])) == "x");
+    assert!(a[2].array_len() == 1);
+    assert!(int_of(a[3].get("k")) == 2);
+    let o = must_decode("{\"b\":1,\"a\":2,\"b\":3}").items();
+    assert!(o.len() == 3);
+    assert!(int_of(Option::Some(o[0])) == 1 && int_of(Option::Some(o[1])) == 2 && int_of(Option::Some(o[2])) == 3);
+    assert!(must_decode("[]").items().len() == 0);
+    assert!(must_decode("7").items().len() == 0);
+}

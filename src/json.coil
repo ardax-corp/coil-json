@@ -28,10 +28,15 @@ class Store {
     ix_live: Vec<int>,
     ix_obj: Vec<int>,
     ix_node: Vec<int>,
+    // Element index of the arrays with at least `INDEXED` elements (their
+    // `flags` entry is set): their element nodes in order, one run per
+    // array, which starts at the array's `last` entry once it is decoded.
+    elems: Vec<int>,
 }
 
-// Objects with this many members get a member index when decoded; smaller
-// ones are searched in member order.
+// Objects with this many members get a member index when decoded, and
+// arrays with this many elements an element index; smaller ones are
+// searched in order.
 const INDEXED: int = 32;
 
 impl Store {
@@ -60,6 +65,7 @@ impl Store {
             last,
             next,
             ki_table(0),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -145,6 +151,36 @@ impl Store {
             c = self.next[c];
         }
         self.flags[obj] = true;
+    }
+
+    // Index the elements of decoded array `arr`: `at` reads them by
+    // position. Its `last` entry is no longer needed for appending, so it
+    // holds where the array's run in `elems` starts.
+    pub fn index_array(int arr) {
+        self.last[arr] = self.elems.len();
+        let c = self.first[arr];
+        while c >= 0 {
+            self.elems.push(c);
+            c = self.next[c];
+        }
+        self.flags[arr] = true;
+    }
+
+    // Element `i` of indexed array `arr` (its node); `i` is in range.
+    pub fn element(int arr, int i) -> int {
+        return self.elems[self.last[arr] + i];
+    }
+
+    // The nodes of the elements of an array or the members of an object, in
+    // document order.
+    pub fn children(int idx) -> Vec<int> {
+        let out: Vec<int> = Vec::with_capacity(self.ints[idx]);
+        let c = self.first[idx];
+        while c >= 0 {
+            out.push(c);
+            c = self.next[c];
+        }
+        return out;
     }
 
     pub fn count_children(int idx) -> int {
@@ -398,7 +434,9 @@ impl JsonValue {
         return Option::Some(JsonValue::wrap(self.store, m));
     }
 
-    /// Element `i` (0-based) of an array.
+    /// Element `i` (0-based) of an array. Constant time on a decoded array
+    /// of 32 or more elements; a smaller one is searched from its start. To
+    /// visit every element, `items()` is linear.
     ///
     /// Returns `None` when `i` is out of range or this is not an array.
     ///
@@ -415,6 +453,12 @@ impl JsonValue {
         if self.tag != 5 || i < 0 {
             return Option::None;
         }
+        if self.store.flags[self.idx] {
+            if i >= self.store.ints[self.idx] {
+                return Option::None;
+            }
+            return Option::Some(JsonValue::wrap(self.store, self.store.element(self.idx, i)));
+        }
         let c = self.store.first[self.idx];
         let n = 0;
         while c >= 0 {
@@ -425,6 +469,35 @@ impl JsonValue {
             c = self.store.next[c];
         }
         return Option::None;
+    }
+
+    /// The elements of an array, or the member values of an object, in
+    /// document order (pair them with `keys()` for an object's names).
+    /// Walking a whole array this way takes time linear in its length.
+    ///
+    /// Returns an empty `Vec` for any other value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use json::{Json, JsonValue};
+    /// # use tests::assert;
+    /// let v = Json::strict().decode_str("[1,2,3]").unwrap_or(JsonValue::null());
+    /// let sum = 0;
+    /// for x in v.items() {
+    ///     sum = sum + x.as_int().unwrap_or(0);
+    /// }
+    /// assert!(sum == 6);
+    /// ```
+    pub fn items() -> Vec<JsonValue> {
+        let out: Vec<JsonValue> = Vec::new();
+        if self.tag != 5 && self.tag != 6 {
+            return out;
+        }
+        for c in self.store.children(self.idx) {
+            out.push(JsonValue::wrap(self.store, c));
+        }
+        return out;
     }
 
     /// Member names of an object in document order, duplicates included.
@@ -1336,6 +1409,9 @@ impl Parser {
             raise JsonError::Invalid { line: self.line, column: self.col };
             }
             self.store.ints[arr] = count;
+            if count >= INDEXED {
+                self.store.index_array(arr);
+            }
             return arr;
         }
         if c == "{" {
