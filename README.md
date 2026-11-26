@@ -49,6 +49,7 @@ Reading a decoded value:
 | `is_null()` … `is_object()` | type checks |
 | `get(key)` | object member (first match) or `None` |
 | `at(i)` | array element or `None` |
+| `items()` | array elements, or object member values, in order |
 | `keys()` | object member names in order |
 | `as_str()` / `as_int()` / `as_float()` / `as_bool()` | the value when it has that type, else `None` |
 | `array_len()` / `object_len()` | child counts |
